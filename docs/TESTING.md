@@ -4,7 +4,7 @@
 npm run verify     # typecheck + 92 tests + 7 contract tests + production build
 ```
 
-Last full run: **134 passing** (Vitest, 12 files) · **7 passing** (Hardhat) · typecheck clean ·
+Last full run: **135 passing** (Vitest, 12 files) · **7 passing** (Hardhat) · typecheck clean ·
 production build clean · browser walkthrough clean.
 
 ---
@@ -110,6 +110,11 @@ These are worth listing because none of them were caught by reasoning about the 
 13. **Half the voice screen stayed English in a Hindi conversation.** The "recorded so far" panel
     was rendered client-side from a hardcoded label table. It is now rendered on the server, where
     the catalogue is.
+14. **`db:reset` silently desynchronised a running dev server.** It deleted the database file, so
+    the server kept writing to the deleted inode while a freshly seeded file sat on disk. The
+    symptom was baffling — actions appearing to succeed against data nobody could see. Found by
+    running the demonstration against a clean clone, and fixed by clearing the tables in place;
+    `db:reset:hard` keeps the old behaviour for schema changes.
 
 ---
 

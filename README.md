@@ -56,8 +56,14 @@ Members of the public never need an account, and never need a crypto wallet.
 ### Reset
 
 ```bash
-npm run db:reset    # deletes the database file, recreates it, reseeds
+npm run db:reset         # clears and reseeds in place — safe while `npm run dev` is running
+npm run db:reset:hard    # deletes and recreates the file; stop the dev server first
 ```
+
+Use the plain reset for a clean demonstration. It clears the tables rather than replacing the
+file, because a running dev server holds an open handle: deleting the file would leave the server
+writing to a deleted inode while a freshly seeded file sat on disk, and the two would silently
+diverge until you restarted. `--hard` is for after a schema change.
 
 ---
 
@@ -212,7 +218,8 @@ tests/                             92 tests; see docs/TESTING.md
 | `npm test` | 92 backend and domain tests |
 | `npm run chain:test` | 7 Solidity contract tests |
 | `npm run verify` | typecheck + tests + contract tests + production build |
-| `npm run db:seed` / `db:reset` | Seed or rebuild the fictional dataset |
+| `npm run db:seed` / `db:reset` | Seed, or clear and reseed in place |
+| `npm run db:reset:hard` | Delete and rebuild the database file (stop the dev server first) |
 | `npm run chain:node` / `chain:deploy` | Local EVM node and deployment |
 
 ---

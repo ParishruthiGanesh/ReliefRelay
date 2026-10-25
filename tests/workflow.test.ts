@@ -15,6 +15,7 @@ import { recordFacilityUpdate, getFacility } from '@/lib/domain/facilities';
 import { metricsSnapshot } from '@/lib/domain/metrics';
 import { suggestMatches, situationSummary } from '@/lib/domain/matching';
 import { createOffer, acceptOffer, listOffers } from '@/lib/domain/inventory';
+import { clearAll, seed } from '@/lib/db/seed';
 import { freshDb, itemIdFor, lotQty, makeRequest } from './helpers';
 
 /**
@@ -475,5 +476,27 @@ describe('an assignment is visible to the coordinator who made it', () => {
     // Nobody is carrying it, and the dashboard must say that rather than
     // still naming the person who dropped out.
     expect(getAllocations(db, requestId)[0].commitments[0].assignment).toBeNull();
+  });
+});
+
+describe('resetting the demonstration data', () => {
+  it('clears and reseeds in place, so an open connection sees the change', () => {
+    const db = freshDb();
+    const { requestId } = makeRequest(db, { items: [{ categoryId: 'meal_packs', quantity: 25 }] });
+    expect(getRequestById(db, requestId)).toBeDefined();
+
+    // The same connection a running server would be holding.
+    clearAll(db);
+    seed(db);
+
+    // The request is gone and the fictional reference data is back — without
+    // the file being replaced underneath anyone.
+    expect(getRequestById(db, requestId)).toBeUndefined();
+    const facilities = db.prepare('SELECT COUNT(*) AS n FROM facilities').get() as { n: number };
+    const lots = db.prepare('SELECT COUNT(*) AS n FROM inventory_lots').get() as { n: number };
+    expect(facilities.n).toBe(5);
+    expect(lots.n).toBe(6);
+    // And stock is back to its seeded totals, not carrying old commitments.
+    expect(lotQty(db, 'lot_aid_meals')).toEqual({ total: 260, committed: 0, available: 260 });
   });
 });
