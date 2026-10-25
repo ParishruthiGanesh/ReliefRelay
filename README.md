@@ -187,7 +187,7 @@ src/lib/conversation/              engine, merge, questions, readback, danger, l
 src/lib/providers/                 stt, tts, extraction, envfeed, chain — one interface each
 src/lib/validation/schemas.ts      every API input and every model output
 src/app/                           pages and route handlers
-tests/                             91 tests; see docs/TESTING.md
+tests/                             92 tests; see docs/TESTING.md
 ```
 
 `docs/ARCHITECTURE.md` explains the data flow and the design rules in detail.
@@ -201,7 +201,7 @@ tests/                             91 tests; see docs/TESTING.md
 | `npm run dev` | Development server |
 | `npm run build` / `npm start` | Production build and serve |
 | `npm run typecheck` | TypeScript, no emit |
-| `npm test` | 91 backend and domain tests |
+| `npm test` | 92 backend and domain tests |
 | `npm run chain:test` | 7 Solidity contract tests |
 | `npm run verify` | typecheck + tests + contract tests + production build |
 | `npm run db:seed` / `db:reset` | Seed or rebuild the fictional dataset |
