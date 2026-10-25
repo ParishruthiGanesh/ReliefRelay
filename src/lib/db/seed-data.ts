@@ -2,16 +2,32 @@
  * Fictional demonstration data.
  *
  * Every district, facility, organisation, person and advisory below is
- * invented for this prototype. The coordinates sit in an uninhabited stretch of
- * ocean so they cannot be mistaken for a real place, and every record is
- * flagged `is_fictional`. Nothing here describes a real emergency.
+ * invented for this prototype, and every record is flagged `is_fictional`.
+ * Nothing here describes a real emergency.
+ *
+ * On the coordinates: these were originally placed in open ocean so they could
+ * not be mistaken for a real place, which worked but left the map a blank blue
+ * rectangle — unusable for choosing a location, which is the one thing a
+ * person in a flood most needs to do. They now sit on real land along the
+ * Cedar River in Iowa, a genuinely flood-prone area, so the basemap shows
+ * streets and the river a person can orient by.
+ *
+ * The trade is handled by labelling rather than by hiding: every facility name
+ * and address carries "(fictional)", every screen carries the fictional-data
+ * badge, and the map states that these are invented places drawn on a real
+ * basemap. No real shelter, hub or organisation is named anywhere.
+ *
+ * To move the demonstration elsewhere, change DISTRICT and the facility
+ * coordinates below, then run `npm run db:reset`. Nothing else depends on
+ * where they are.
  */
 
 export const DISTRICT = {
   id: 'dist_riverbend',
   name: 'Riverbend District (fictional)',
-  centerLat: 0.0,
-  centerLng: -30.0,
+  // Near the Cedar River, Iowa. A fictional district on a real basemap.
+  centerLat: 41.978,
+  centerLng: -91.666,
 };
 
 export const CATEGORIES = [
@@ -26,8 +42,8 @@ export const FACILITIES = [
     id: 'fac_riverside_primary',
     name: 'Riverside Primary School',
     kind: 'shelter' as const,
-    lat: 0.028,
-    lng: -30.031,
+    lat: 41.99,
+    lng: -91.675,
     address: '14 Mill Lane, Riverbend (fictional)',
     publicContact: 'Shelter desk: +00 000 0101 (fictional)',
     accessibility: ['step_free_entrance', 'accessible_toilet', 'ground_floor_sleeping'],
@@ -39,8 +55,8 @@ export const FACILITIES = [
     id: 'fac_old_bridge_hall',
     name: 'Old Bridge Community Hall',
     kind: 'shelter' as const,
-    lat: 0.012,
-    lng: -30.047,
+    lat: 41.97,
+    lng: -91.68,
     address: '2 Bridge Road, Riverbend (fictional)',
     publicContact: 'Hall warden: +00 000 0102 (fictional)',
     accessibility: ['step_free_entrance', 'quiet_room'],
@@ -52,8 +68,8 @@ export const FACILITIES = [
     id: 'fac_northfield_college',
     name: 'Northfield College Gymnasium',
     kind: 'shelter' as const,
-    lat: 0.062,
-    lng: -30.012,
+    lat: 42.01,
+    lng: -91.65,
     address: 'Northfield Campus, Riverbend (fictional)',
     publicContact: 'Campus line: +00 000 0103 (fictional)',
     accessibility: ['step_free_entrance', 'accessible_toilet', 'assistance_animals_welcome'],
@@ -65,8 +81,8 @@ export const FACILITIES = [
     id: 'fac_depot_south',
     name: 'Southgate Supply Hub',
     kind: 'supply_hub' as const,
-    lat: -0.019,
-    lng: -30.055,
+    lat: 41.955,
+    lng: -91.66,
     address: 'Unit 7, Southgate Industrial Estate, Riverbend (fictional)',
     publicContact: 'Hub desk: +00 000 0201 (fictional)',
     accessibility: ['loading_bay', 'forklift'],
@@ -78,8 +94,8 @@ export const FACILITIES = [
     id: 'fac_depot_north',
     name: 'Northfield Rail Yard Hub',
     kind: 'supply_hub' as const,
-    lat: 0.071,
-    lng: -30.004,
+    lat: 42.015,
+    lng: -91.64,
     address: 'Rail Yard Gate 3, Riverbend (fictional)',
     publicContact: 'Hub desk: +00 000 0202 (fictional)',
     accessibility: ['loading_bay'],
@@ -289,8 +305,8 @@ export const SCENARIO_ADVISORIES = [
     sourceName: 'Riverbend District Water Office (fictional)',
     sourceUrl: null,
     coverageLabel: 'Riverbend left bank: Mill Lane to Southgate',
-    centerLat: 0.02,
-    centerLng: -30.04,
+    centerLat: 41.980,
+    centerLng: -91.672,
     radiusKm: 6,
     publishedOffsetMinutes: -95,
     expiresOffsetMinutes: 600,
@@ -304,8 +320,8 @@ export const SCENARIO_ADVISORIES = [
     sourceName: 'Riverbend District Water Office (fictional)',
     sourceUrl: null,
     coverageLabel: 'Northfield tributary catchment',
-    centerLat: 0.066,
-    centerLng: -30.008,
+    centerLat: 42.012,
+    centerLng: -91.645,
     radiusKm: 4,
     publishedOffsetMinutes: -220,
     expiresOffsetMinutes: 400,
@@ -319,8 +335,8 @@ export const SCENARIO_ADVISORIES = [
     sourceName: 'Riverbend District Roads Office (fictional)',
     sourceUrl: null,
     coverageLabel: 'Southgate Industrial Estate',
-    centerLat: -0.019,
-    centerLng: -30.055,
+    centerLat: 41.955,
+    centerLng: -91.660,
     radiusKm: 3,
     publishedOffsetMinutes: -900,
     expiresOffsetMinutes: -120,

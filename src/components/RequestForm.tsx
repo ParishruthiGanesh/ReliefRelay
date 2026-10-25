@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Alert, Badge, Button, Card, FieldLabel, SectionHeading } from './ui';
+import { LocationPicker, type ChosenLocation } from './LocationPicker';
 import {
   clearLocalDraft,
   enqueue,
@@ -41,11 +42,13 @@ interface Selection {
 
 const DRAFT_SCOPE = 'form';
 
-export function RequestForm() {
+export function RequestForm({ districtCentre }: { districtCentre: { lat: number; lng: number } }) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [locationText, setLocationText] = useState('');
   const [facilityId, setFacilityId] = useState('');
+  const [point, setPoint] = useState<ChosenLocation | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [groupSize, setGroupSize] = useState('');
   const [urgency, setUrgency] = useState('');
   const [behalfRole, setBehalfRole] = useState('self');
@@ -110,6 +113,10 @@ export function RequestForm() {
       intent: 'need' as const,
       locationText: locationText.trim() || facilities.find((f) => f.id === facilityId)?.name || '',
       facilityId: facilityId || undefined,
+      // A point the person placed themselves is a confirmation by someone who
+      // is there, which is the only kind this app accepts.
+      lat: point && !point.facilityId ? point.lat : undefined,
+      lng: point && !point.facilityId ? point.lng : undefined,
       groupSize: groupSize ? Number(groupSize) : null,
       items: selections.map((s) => ({
         categoryId: s.categoryId,
@@ -285,6 +292,32 @@ export function RequestForm() {
             ))}
           </select>
         </div>
+
+        <div className="mt-3">
+          <Button onClick={() => setShowPicker((v) => !v)} variant="secondary">
+            {showPicker ? 'Hide the map' : '📍 Use my current location or the map'}
+          </Button>
+          {point ? (
+            <p className="mt-2 text-sm text-ink-700">
+              <Badge tone="good">Place set</Badge> {point.label}
+            </p>
+          ) : null}
+        </div>
+
+        {showPicker ? (
+          <div className="mt-3 border-t border-sand-200 pt-3">
+            <LocationPicker
+              center={districtCentre}
+              confirmLabel="Use this place"
+              onConfirm={(location) => {
+                setPoint(location);
+                setLocationText(location.label);
+                setFacilityId(location.facilityId ?? '');
+                setShowPicker(false);
+              }}
+            />
+          </div>
+        ) : null}
       </Card>
 
       <Card>

@@ -9,10 +9,15 @@ export const urgencySchema = z.enum(['low', 'normal', 'high', 'critical']);
 export const behalfRoleSchema = z.enum(['self', 'community_rep', 'coordinator', 'facility_rep']);
 export const contactMethodSchema = z.enum(['phone', 'whatsapp', 'sms', 'none']);
 
-/** Languages the app offers. Each must be verified against the configured
- * speech providers before it is shown as voice-capable — see
- * src/lib/providers/languages.ts. */
-export const languageSchema = z.enum(['en', 'hi', 'ta', 'te']);
+/**
+ * Languages with a built-in message catalogue.
+ *
+ * A language is listed here only when the assistant can actually word its
+ * replies in it. Speech-provider coverage is a separate question answered in
+ * src/lib/providers/languages.ts, and translation review status is reported
+ * separately again — none of the three is assumed from the others.
+ */
+export const languageSchema = z.enum(['en', 'hi', 'ta', 'te', 'es']);
 export type LanguageCode = z.infer<typeof languageSchema>;
 
 // ─────────────────────────────── draft ─────────────────────────────────────
@@ -134,6 +139,12 @@ export const proposedUpdateSchema = z
     notes: z.array(z.string().max(400)).max(6).nullish(),
     /** Free-text reason the model gives for its reading. Shown to coordinators. */
     reasoning: z.string().max(600).nullish(),
+    /**
+     * BCP-47 code of the language the person used, when the model is confident.
+     * Advisory only: it selects which catalogue words the reply, and a code
+     * with no catalogue falls back to English rather than to nothing.
+     */
+    detectedLanguage: z.string().max(12).nullish(),
   })
   .strict();
 export type ProposedUpdate = z.infer<typeof proposedUpdateSchema>;
@@ -217,6 +228,9 @@ export const directRequestSchema = z.object({
   intent: z.literal('need').default('need'),
   locationText: z.string().min(2).max(400),
   facilityId: z.string().optional(),
+  /** A point the person placed themselves, from the map or their device. */
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
   groupSize: z.number().int().positive().max(100_000).nullable().default(null),
   items: z
     .array(

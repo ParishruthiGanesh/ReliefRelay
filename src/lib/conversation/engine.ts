@@ -12,6 +12,8 @@ import {
   type RequestDraft,
 } from '@/lib/validation/schemas';
 import { detectDanger, emergencyGuidance, type EmergencyGuidance } from './danger';
+import { detectLanguage, replyLanguage } from '@/lib/i18n/detect';
+import { catalogueFor, isSupported, t } from '@/lib/i18n/messages';
 import { matchLocation } from './locations';
 import { mergeProposal } from './merge';
 import {
@@ -20,6 +22,7 @@ import {
   type AssistantQuestion,
 } from './questions';
 import { buildReadback, submissionConfirmation, type Readback } from './summary';
+import { categoryLabel, formatQuantity } from '@/lib/util/units';
 
 /**
  * Turn-by-turn conversation engine.
@@ -46,6 +49,30 @@ export interface ConversationView {
   askedFields: string[];
   emergency: EmergencyGuidance | null;
   providers: { extraction: ProviderInfo | null };
+  /**
+   * The draft rendered in the conversation's language.
+   *
+   * Built on the server because that is where the catalogue lives. Rendering
+   * it client-side meant the panel showed English category names beside a
+   * Hindi read-back, which is the same information twice in two languages.
+   */
+  draftDisplay: {
+    items: Array<{ categoryId: string; label: string; quantityLabel: string; note?: string }>;
+    groupSizeLabel: string | null;
+    placeLabel: string | null;
+    placeConfirmed: boolean;
+  };
+  /** Which language the assistant is replying in, and how sure that is. */
+  languageState: {
+    replyingIn: string;
+    label: string;
+    reviewed: boolean;
+    reviewNote?: string;
+    /** True when the last turn changed the reply language automatically. */
+    switched: boolean;
+    /** Set when the person wrote in a script no catalogue covers. */
+    needsModelForThisLanguage: boolean;
+  };
   turns: Array<{ role: 'user' | 'assistant'; text: string; createdAt: string; inputMode: string }>;
   submitted: { requestId: string; referenceCode: string; status: string } | null;
 }
@@ -162,10 +189,10 @@ export function startConversation(
       now,
     });
 
-    const opening =
-      input.mode === 'facility_update'
-        ? 'Tell me what has changed at your facility. For example, how many spaces are left.'
-        : 'Tell me what you need and where you are. Take your time.';
+    const opening = t(
+      input.language,
+      input.mode === 'facility_update' ? 'opening.facility' : 'opening.request',
+    );
     appendTurn(tx, conversationId, { role: 'assistant', text: opening, inputMode: 'system' });
   });
 
@@ -182,7 +209,7 @@ export function viewConversation(db: DB, conversationId: string): ConversationVi
   // The question the assistant actually asked, so the user is never shown one
   // question while the server interprets their answer against another.
   const question = row.state === 'collecting' ? storedQuestion(row) : null;
-  const readback = row.state === 'confirming' ? buildReadback(draft) : null;
+  const readback = row.state === 'confirming' ? buildReadback(draft, row.language) : null;
 
   let submitted: ConversationView['submitted'] = null;
   if (row.submitted_request_id) {
@@ -212,6 +239,33 @@ export function viewConversation(db: DB, conversationId: string): ConversationVi
     askedFields,
     emergency: draft.dangerReported ? emergencyGuidance([]) : null,
     providers: { extraction: null },
+    draftDisplay: {
+      items: draft.items.map((item) => ({
+        categoryId: item.categoryId,
+        label: categoryLabel(item.categoryId, row.language),
+        quantityLabel: formatQuantity(
+          item.quantity,
+          item.categoryId,
+          item.quantityUncertain,
+          row.language,
+        ),
+        ...(item.note ? { note: item.note } : {}),
+      })),
+      groupSizeLabel:
+        draft.groupSize === null
+          ? null
+          : `${draft.groupSize} ${t(row.language, draft.groupSize === 1 ? 'people.one' : 'people.many')}`,
+      placeLabel: draft.locationText,
+      placeConfirmed: draft.locationConfirmed,
+    },
+    languageState: {
+      replyingIn: row.language,
+      label: catalogueFor(row.language).label,
+      reviewed: catalogueFor(row.language).reviewed,
+      reviewNote: catalogueFor(row.language).reviewNote,
+      switched: false,
+      needsModelForThisLanguage: !isSupported(row.language),
+    },
     turns: turns.map((t) => ({
       role: t.role,
       text: t.text,
@@ -257,8 +311,23 @@ export async function submitTurn(
     history: turns.slice(-6).map((t) => ({ role: t.role, text: t.text })),
   });
 
+  // Which language they actually used this turn. A decisive script signal
+  // overrides the menu choice, so someone who picked English and then spoke
+  // Tamil is answered in Tamil rather than being left behind by a dropdown.
+  const detection = detectLanguage(options.text);
+  const { language: activeLanguage, switched: languageSwitched } = replyLanguage(
+    row.language,
+    detection,
+  );
+
   const merged = mergeProposal(draftBefore, extraction.update, options.text);
   let draft = merged.draft;
+  // Only a language with a catalogue goes into the draft. An unlisted one is
+  // still detected and reported, so the interface can say a model is needed
+  // for it, but it never becomes a stored value nothing can render.
+  if (isSupported(activeLanguage) && activeLanguage !== draft.language) {
+    draft = requestDraftSchema.parse({ ...draft, language: activeLanguage });
+  }
 
   // Danger is also checked server-side on the raw text, so a model that misses
   // it cannot suppress the emergency interruption.
@@ -318,34 +387,42 @@ export async function submitTurn(
   }
 
   let questionCount = row.question_count;
-  const following = nextQuestion({ draft, askedFields: nextAsked, questionCount });
+  const following = nextQuestion({
+    draft,
+    askedFields: nextAsked,
+    questionCount,
+    language: activeLanguage,
+  });
 
   let state: ConversationState = row.state === 'confirming' ? 'confirming' : 'collecting';
   let assistantText: string;
 
   if (danger.detected) {
     // Interrupt the routine questions with brief guidance, then continue.
-    const guidance = emergencyGuidance(danger.labels);
-    assistantText = `${guidance.body} Call ${guidance.emergencyNumber} — ${guidance.emergencyLabel}.`;
+    const guidance = emergencyGuidance(danger.labels, activeLanguage);
+    assistantText = `${guidance.body} ${t(activeLanguage, 'danger.call', {
+      number: guidance.emergencyNumber,
+      label: guidance.emergencyLabel,
+    })}`;
     if (following) {
-      assistantText += ` When you can, I still need one thing: ${following.text}`;
+      assistantText += ` ${t(activeLanguage, 'danger.still_need', { question: following.text })}`;
       questionCount += 1;
       if (!nextAsked.includes(questionKey(following, draft))) {
         nextAsked.push(questionKey(following, draft));
       }
     } else {
       state = 'confirming';
-      assistantText += ` ${buildReadback(draft).summary}`;
+      assistantText += ` ${buildReadback(draft, activeLanguage).summary}`;
     }
   } else if (following) {
-    assistantText = acknowledge(draftBefore, draft, merged.changed) + following.text;
+    assistantText = acknowledge(draftBefore, draft, merged.changed, activeLanguage) + following.text;
     questionCount += 1;
     if (!nextAsked.includes(questionKey(following, draft))) {
       nextAsked.push(questionKey(following, draft));
     }
   } else {
     state = 'confirming';
-    assistantText = buildReadback(draft).summary;
+    assistantText = buildReadback(draft, activeLanguage).summary;
   }
 
   transact(db, (tx) => {
@@ -365,7 +442,7 @@ export async function submitTurn(
     tx.prepare(
       `UPDATE conversations
           SET draft_json = @draft, asked_fields = @asked, pending_question = @pending,
-              question_count = @count, state = @state, updated_at = @now
+              question_count = @count, state = @state, language = @language, updated_at = @now
         WHERE id = @id`,
     ).run({
       id: conversationId,
@@ -374,6 +451,7 @@ export async function submitTurn(
       pending: state === 'collecting' && following ? JSON.stringify(following) : null,
       count: questionCount,
       state,
+      language: activeLanguage,
       now: nowIso(),
     });
   });
@@ -383,7 +461,12 @@ export async function submitTurn(
     ...view,
     assistantText,
     providers: { extraction: extraction.provider },
-    emergency: danger.detected ? emergencyGuidance(danger.labels) : view.emergency,
+    languageState: {
+      ...view.languageState,
+      switched: languageSwitched,
+      needsModelForThisLanguage: detection.unsupportedScript || !isSupported(activeLanguage),
+    },
+    emergency: danger.detected ? emergencyGuidance(danger.labels, activeLanguage) : view.emergency,
   };
 }
 
@@ -391,7 +474,12 @@ export async function submitTurn(
  * A short acknowledgement of what was understood, before the next question.
  * It repeats back only what the user actually said.
  */
-function acknowledge(before: RequestDraft, after: RequestDraft, changed: string[]): string {
+function acknowledge(
+  before: RequestDraft,
+  after: RequestDraft,
+  changed: string[],
+  language: string,
+): string {
   if (changed.length === 0) return '';
   const parts: string[] = [];
 
@@ -399,15 +487,16 @@ function acknowledge(before: RequestDraft, after: RequestDraft, changed: string[
     (item) => !before.items.some((b) => b.categoryId === item.categoryId),
   );
   if (newItems.length > 0) {
-    const names = newItems.map((i) => i.categoryId.replace('_', ' '));
-    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.slice(-1)}`;
-    parts.push(`I recorded ${list}`);
+    const list = newItems
+      .map((i) => categoryLabel(i.categoryId, language).toLowerCase())
+      .join(', ');
+    parts.push(t(language, 'ack.recorded', { list }));
   }
   if (after.groupSize !== before.groupSize && after.groupSize !== null) {
     parts.push(
-      before.groupSize === null
-        ? `for ${after.groupSize} people`
-        : `updated to ${after.groupSize} people`,
+      t(language, before.groupSize === null ? 'ack.for_people' : 'ack.updated_people', {
+        n: after.groupSize,
+      }),
     );
   }
   const changedQty = after.items.find((item) => {
@@ -415,10 +504,12 @@ function acknowledge(before: RequestDraft, after: RequestDraft, changed: string[
     return prev && prev.quantity !== item.quantity && item.quantity !== null;
   });
   if (changedQty) {
-    parts.push(`${changedQty.quantity} ${changedQty.unit} of ${changedQty.categoryId.replace('_', ' ')}`);
+    parts.push(
+      formatQuantity(changedQty.quantity, changedQty.categoryId, changedQty.quantityUncertain, language),
+    );
   }
   if (changed.includes('locationText') && after.locationText) {
-    parts.push(`at ${after.locationText}`);
+    parts.push(t(language, 'ack.at_place', { place: after.locationText }));
   }
   return parts.length > 0 ? `${parts.join(' ')}. ` : '';
 }
@@ -468,11 +559,12 @@ export function selectLocation(
     draft: next,
     askedFields,
     questionCount: row.question_count,
+    language: row.language,
   });
   const state: ConversationState = following ? 'collecting' : 'confirming';
   const assistantText = following
-    ? `Thank you, ${resolved.label}. ${following.text}`
-    : buildReadback(next).summary;
+    ? `${t(row.language, 'ack.at_place', { place: resolved.label })}. ${following.text}`
+    : buildReadback(next, row.language).summary;
 
   transact(db, (tx) => {
     appendTurn(tx, conversationId, {
@@ -523,7 +615,7 @@ export function applyManualEdit(
 export function moveToConfirmation(db: DB, conversationId: string): ConversationView {
   const row = loadRow(db, conversationId);
   const draft = requestDraftSchema.parse(JSON.parse(row.draft_json));
-  const readback = buildReadback(draft);
+  const readback = buildReadback(draft, row.language);
   transact(db, (tx) => {
     appendTurn(tx, conversationId, { role: 'assistant', text: readback.summary, inputMode: 'system' });
     tx.prepare(
@@ -603,7 +695,7 @@ export function confirmAndSubmit(
     transcriptText: transcript,
   });
 
-  const assistantText = submissionConfirmation(created.referenceCode);
+  const assistantText = submissionConfirmation(created.referenceCode, row.language);
   const result: SubmitResult = {
     requestId: created.requestId,
     referenceCode: created.referenceCode,

@@ -7,6 +7,21 @@ import type {
   ProviderInfo,
 } from '../types';
 import { digitize, firstNumber } from './numbers';
+import { detectLanguage } from '@/lib/i18n/detect';
+import { CATEGORY_IDS as ALL_CATEGORY_IDS } from '@/lib/util/units';
+
+const CATEGORY_IDS = ALL_CATEGORY_IDS as CategoryId[];
+
+/**
+ * Phrases that mark a correction rather than new information.
+ *
+ * Shared across languages because a correction usually arrives with a fresh
+ * number, and the number is the signal that matters. A missed correction
+ * marker only means the new value is treated as new information, which the
+ * merge handles the same way.
+ */
+const CORRECTION_SIGNAL =
+  /\b(actually|sorry|i meant|i mean|make it|correction|change (it|that) to|no,? it'?s|instead)\b|(en realidad|perd[oó]n|quise decir|corrijo|mejor)|(दरअसल|माफ़|माफ|मेरा मतलब|सुधार)|(உண்மையில்|மன்னிக்கவும்|திருத்தம்)|(నిజానికి|క్షమించండి|సవరణ)/i;
 
 /**
  * The deterministic extractor.
@@ -28,76 +43,7 @@ export const RULES_PROVIDER: ProviderInfo = {
   kind: 'local',
 };
 
-const AFFIRMATIVE = /\b(yes|yeah|yep|yup|correct|that'?s right|right|ok|okay|sure|please do|go ahead|confirm|submit it)\b/i;
-const NEGATIVE = /\b(no|nope|not really|that'?s wrong|incorrect|don'?t|do not|cancel|stop)\b/i;
-const SKIP = /\b(i don'?t know|dont know|not sure|no idea|skip|pass|can'?t say|cannot say|unsure|unknown)\b/i;
-
-const OFFER_SIGNALS =
-  /\b(we|i)\s+(can|could|will|would)\s+(provide|supply|donate|give|bring|deliver|spare|send|offer)\b|\boffering\b|\bwe have\b[^.]*\b(available|spare|to (give|donate|spare))\b|\bhappy to (provide|donate|help with)\b/i;
-const NEED_SIGNALS =
-  /\b(we|i|they)\s+(need|needs|require|want)\b|\bneed\b|\bwe have no\b|\bran? out of\b|\brunning out of\b|\bshort of\b|\bplease send\b|\bcan you send\b|\bwe are without\b|\bno (food|water|drinking water)\b/i;
-
-const CORRECTION_SIGNAL =
-  /\b(actually|sorry|i meant|i mean|make it|correction|change (it|that) to|no,? it'?s|instead)\b/i;
-
-interface CategoryRule {
-  categoryId: 'meal_packs' | 'drinking_water' | 'hygiene_kits' | 'shelter_spaces';
-  /** Mentions of the resource at all. */
-  mention: RegExp;
-  /** A quantity in the category's own canonical unit. */
-  quantity: RegExp[];
-  /** A count in a unit this app does not convert. */
-  ambiguous?: Array<{ re: RegExp; unitWord: string }>;
-}
-
-const CATEGORY_RULES: CategoryRule[] = [
-  {
-    categoryId: 'meal_packs',
-    mention: /\b(food|meals?|meal packs?|ration|rations|something to eat|hungry|cooked food|dry food|food packs?)\b/i,
-    quantity: [
-      /\b(\d{1,6})\s*(?:meal\s*packs?|food\s*packs?|packs?|rations?|meals?)\b/i,
-    ],
-    ambiguous: [
-      { re: /\b(\d{1,6})\s*(?:boxes?|cartons?|crates?|sacks?|bags?)\b[^.]{0,20}\b(?:food|meals?|ration)/i, unitWord: 'boxes' },
-      { re: /\b(?:food|meals?|rations?)\b[^.]{0,20}\b(\d{1,6})\s*(?:boxes?|cartons?|crates?|sacks?|bags?)\b/i, unitWord: 'boxes' },
-    ],
-  },
-  {
-    categoryId: 'drinking_water',
-    mention: /\b(water|drinking water|clean water|thirsty|no water)\b/i,
-    quantity: [
-      /\b(\d{1,6})\s*(?:litres?|liters?|ltrs?|l)\b(?:\s*of)?(?:\s*(?:drinking\s*)?water)?/i,
-      /\bwater\b[^.]{0,15}\b(\d{1,6})\s*(?:litres?|liters?|ltrs?)\b/i,
-    ],
-    ambiguous: [
-      { re: /\b(\d{1,6})\s*(?:bottles?|cans?|jerry\s?cans?|containers?|packs?|cases?)\b[^.]{0,15}\b(?:of\s*)?(?:drinking\s*)?water\b/i, unitWord: 'bottles' },
-      { re: /\bwater\b[^.]{0,15}\b(\d{1,6})\s*(?:bottles?|cans?|jerry\s?cans?|containers?|cases?)\b/i, unitWord: 'bottles' },
-    ],
-  },
-  {
-    categoryId: 'hygiene_kits',
-    mention: /\b(hygiene|sanitary|sanitation|soap|toiletries|nappies|diapers|sanitary pads|washing)\b/i,
-    quantity: [/\b(\d{1,6})\s*(?:hygiene\s*kits?|sanitation\s*kits?|kits?)\b/i],
-  },
-  {
-    categoryId: 'shelter_spaces',
-    mention: /\b(shelter|somewhere to stay|place to stay|sleep|beds?|spaces?|accommodation|roof over)\b/i,
-    quantity: [/\b(\d{1,6})\s*(?:shelter\s*spaces?|spaces?|beds?|places?|spots?)\b/i],
-  },
-];
-
-const GROUP_SIZE_PATTERNS: RegExp[] = [
-  /\b(?:there (?:are|is)|we are|we're)\s*(?:about|around|roughly|approximately)?\s*(\d{1,6})\s*(?:people|persons|of us|adults|families|children|here)?\b/i,
-  /\b(\d{1,6})\s*(?:people|persons|individuals|survivors|residents)\b/i,
-  /\bfamily of\s*(\d{1,6})\b/i,
-  /\bgroup of\s*(\d{1,6})\b/i,
-  /\b(\d{1,6})\s*of us\b/i,
-];
-
-const APPROX = /\b(about|around|roughly|approximately|maybe|more or less|or so)\b/i;
-
-const URGENCY_CRITICAL = /\b(critical|life threatening|emergency)\b/i;
-const URGENCY_HIGH = /\b(urgent|urgently|immediately|right now|as soon as possible|asap|desperate)\b/i;
+import { vocabularyFor, type CategoryId, type LanguageVocabulary } from './keywords';
 
 function matchQuantity(patterns: RegExp[], text: string): number | null {
   for (const re of patterns) {
@@ -111,10 +57,10 @@ function matchQuantity(patterns: RegExp[], text: string): number | null {
 }
 
 function matchAmbiguous(
-  rule: CategoryRule,
+  entries: Array<{ re: RegExp; unitWord: string }>,
   text: string,
 ): { count: number; unitWord: string } | null {
-  for (const entry of rule.ambiguous ?? []) {
+  for (const entry of entries) {
     const m = text.match(entry.re);
     if (m?.[1]) {
       const value = Number(m[1]);
@@ -124,13 +70,17 @@ function matchAmbiguous(
   return null;
 }
 
-function extractGroupSize(text: string): { value: number; approximate: boolean } | null {
-  for (const re of GROUP_SIZE_PATTERNS) {
+function extractGroupSize(
+  text: string,
+  raw: string,
+  vocab: LanguageVocabulary,
+): { value: number; approximate: boolean } | null {
+  for (const re of vocab.groupSize) {
     const m = text.match(re);
     if (m?.[1]) {
       const value = Number(m[1]);
       if (Number.isFinite(value) && value > 0 && value <= 100_000) {
-        return { value, approximate: APPROX.test(text) };
+        return { value, approximate: vocab.approximate.test(raw) };
       }
     }
   }
@@ -141,12 +91,16 @@ function extractGroupSize(text: string): { value: number; approximate: boolean }
  * Answers to a pending question are read in that question's context first.
  * "Yes" only means something when there is a question on the table.
  */
-function interpretAnswer(context: ExtractionContext, digits: string): ProposedUpdate | null {
+function interpretAnswer(
+  context: ExtractionContext,
+  digits: string,
+  vocab: LanguageVocabulary,
+): ProposedUpdate | null {
   const question = context.pendingQuestion;
   if (!question) return null;
   const raw = context.userText.trim();
 
-  if (SKIP.test(raw)) {
+  if (vocab.skip.test(raw)) {
     return { skipField: question.field, notes: [`User could not answer: ${question.field}.`] };
   }
 
@@ -168,14 +122,14 @@ function interpretAnswer(context: ExtractionContext, digits: string): ProposedUp
     }
     case 'group_scope': {
       if (question.answerKind === 'yes_no') {
-        if (AFFIRMATIVE.test(raw) && !NEGATIVE.test(raw)) {
+        if (vocab.affirmative.test(raw) && !vocab.negative.test(raw)) {
           // Confirms the scope. Still produces no supply quantity.
           return {
             answeredField: 'group_scope',
             notes: ['User confirmed the request covers the whole group.'],
           };
         }
-        if (NEGATIVE.test(raw)) {
+        if (vocab.negative.test(raw)) {
           const n = firstNumber(digits);
           return n
             ? { groupSize: n, answeredField: 'group_scope' }
@@ -212,19 +166,31 @@ export class RulesExtractionProvider implements ExtractionProvider {
 
   async extract(context: ExtractionContext): Promise<ExtractionResult> {
     const raw = context.userText;
-    const digits = digitize(raw);
+    // Read the text with the vocabulary of the language it is actually in,
+    // falling back to the conversation's language and then to English. Place
+    // names stay in the person's own words either way.
+    const detected = detectLanguage(raw);
+    const language = detected.language ?? context.language;
+    const vocab = vocabularyFor(language);
+    const digits = digitize(raw, vocab.numberWords);
     const update: ProposedUpdate = {};
     const notes: string[] = [];
 
+    if (detected.unsupportedScript) {
+      notes.push(
+        'The text is in a script the built-in extractor has no vocabulary for. Configure EXTRACTION_PROVIDER=anthropic to read it.',
+      );
+    }
+
     // 1. The answer to a pending question takes precedence.
-    const answer = interpretAnswer(context, digits);
+    const answer = interpretAnswer(context, digits, vocab);
     if (answer) Object.assign(update, answer);
 
     // 2. Intent. An explicit offer wins over a bare mention of supplies, and
     // can still correct an earlier reading, because "we need 50 meals" and
     // "we can provide 50 meals" must never be confused.
-    const offers = OFFER_SIGNALS.test(raw);
-    const needs = NEED_SIGNALS.test(raw);
+    const offers = vocab.offer.test(raw);
+    const needs = vocab.need.test(raw);
     if (!update.intent) {
       if (offers && !needs) update.intent = 'offer';
       else if (needs) update.intent = 'need';
@@ -232,7 +198,7 @@ export class RulesExtractionProvider implements ExtractionProvider {
         // Resources named with no verb either way ("food and water for 25")
         // read as a need, which is what this screen is for. Flagged so a
         // coordinator can see it was inferred rather than stated.
-        const anyResource = CATEGORY_RULES.some((rule) => rule.mention.test(raw));
+        const anyResource = CATEGORY_IDS.some((id) => vocab.categories[id].test(raw));
         if (anyResource) {
           update.intent = 'need';
           notes.push('Intent inferred as a need: resources were named without "need" or "offer".');
@@ -242,40 +208,41 @@ export class RulesExtractionProvider implements ExtractionProvider {
 
     // 3. Resources, with quantities only where a recognised unit was used.
     const items: NonNullable<ProposedUpdate['items']> = update.items ? [...update.items] : [];
-    for (const rule of CATEGORY_RULES) {
-      if (items.some((i) => i.categoryId === rule.categoryId)) continue;
-      const mentioned = rule.mention.test(raw);
-      const quantity = matchQuantity(rule.quantity, digits);
-      const ambiguous = quantity === null ? matchAmbiguous(rule, digits) : null;
+    for (const categoryId of CATEGORY_IDS) {
+      if (items.some((i) => i.categoryId === categoryId)) continue;
+      const mentioned = vocab.categories[categoryId].test(raw);
+      const quantity = matchQuantity(vocab.quantities[categoryId] ?? [], digits);
+      const ambiguous =
+        quantity === null ? matchAmbiguous(vocab.ambiguous[categoryId] ?? [], digits) : null;
 
       if (quantity !== null) {
         items.push({
-          categoryId: rule.categoryId,
+          categoryId,
           quantity,
-          quantityUncertain: APPROX.test(raw),
+          quantityUncertain: vocab.approximate.test(raw),
         });
       } else if (ambiguous) {
         // The number is real but the unit is not one we track. Record what they
         // said and ask; never convert bottles into litres.
         items.push({
-          categoryId: rule.categoryId,
+          categoryId,
           quantity: null,
           quantityUncertain: true,
           note: `User said ${ambiguous.count} ${ambiguous.unitWord}; unit not recognised, canonical quantity still needed.`,
         });
       } else if (mentioned) {
-        items.push({ categoryId: rule.categoryId, quantity: null, quantityUncertain: true });
+        items.push({ categoryId, quantity: null, quantityUncertain: true });
       }
     }
     if (items.length > 0) update.items = items;
 
     // 4. Group size — people, kept well away from supply quantities.
     if (!update.groupSize) {
-      const group = extractGroupSize(digits);
+      const group = extractGroupSize(digits, raw, vocab);
       if (group) {
         update.groupSize = group.value;
         update.groupSizeUncertain = group.approximate;
-      } else if (CORRECTION_SIGNAL.test(raw) && /\b(people|persons|of us)\b/i.test(raw)) {
+      } else if (CORRECTION_SIGNAL.test(raw)) {
         const n = firstNumber(digits);
         if (n !== null) {
           update.groupSize = n;
@@ -293,8 +260,8 @@ export class RulesExtractionProvider implements ExtractionProvider {
     }
 
     // 6. Urgency as the user reported it. Never inferred from phrasing quality.
-    if (URGENCY_CRITICAL.test(raw)) update.urgency = 'critical';
-    else if (URGENCY_HIGH.test(raw)) update.urgency = 'high';
+    if (vocab.critical.test(raw)) update.urgency = 'critical';
+    else if (vocab.urgent.test(raw)) update.urgency = 'high';
 
     // 7. Immediate danger.
     const danger = detectDanger(raw);
@@ -308,7 +275,7 @@ export class RulesExtractionProvider implements ExtractionProvider {
     if (!context.pendingQuestion) {
       if (/\b(submit|send it|yes submit|go ahead|please submit)\b/i.test(raw)) {
         update.confirmSubmission = true;
-      } else if (AFFIRMATIVE.test(raw) && !NEGATIVE.test(raw) && raw.trim().length <= 24) {
+      } else if (vocab.affirmative.test(raw) && !vocab.negative.test(raw) && raw.trim().length <= 24) {
         update.confirmSubmission = true;
       }
       if (/\b(cancel|don'?t send|do not send|stop|discard)\b/i.test(raw)) {

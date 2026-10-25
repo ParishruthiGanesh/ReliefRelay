@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { RequestForm } from '@/components/RequestForm';
+import { DISTRICT } from '@/lib/db/seed-data';
 import { Alert, FictionalNotice } from '@/components/ui';
 
 export const metadata = { title: 'Type your request — ReliefRelay' };
@@ -20,7 +21,7 @@ export default function FormPage() {
         not contact responders on your behalf.
       </Alert>
 
-      <RequestForm />
+      <RequestForm districtCentre={{ lat: DISTRICT.centerLat, lng: DISTRICT.centerLng }} />
 
       <p className="text-sm text-ink-500">
         Would you rather speak? <Link className="underline" href="/ask/voice">Use the voice assistant.</Link>

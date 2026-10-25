@@ -5,7 +5,7 @@ import { AnthropicExtractionProvider } from '@/lib/providers/extraction/anthropi
 import { getSttProvider, sttStatus, sttUnavailable } from '@/lib/providers/stt';
 import { browserSynthesisResult, getTtsProvider, ttsStatus } from '@/lib/providers/tts';
 import { envFeedStatus, getEnvFeedProvider } from '@/lib/providers/envfeed';
-import { languageSupport } from '@/lib/providers/languages';
+import { languageSupport, unlistedLanguagePolicy } from '@/lib/providers/languages';
 import { DEMO_PROVIDER, demoScript } from '@/lib/providers/stt/demo';
 import { emptyDraft } from '@/lib/validation/schemas';
 import { digitize, firstNumber } from '@/lib/providers/extraction/numbers';
@@ -120,6 +120,16 @@ describe('missing credentials produce honest fallbacks', () => {
     }
   });
 
+  it('reports that Claude unlocks any language once configured', () => {
+    process.env.EXTRACTION_PROVIDER = 'anthropic';
+    process.env.ANTHROPIC_API_KEY = 'test-key-not-used';
+    const policy = unlistedLanguagePolicy();
+    expect(policy.supported).toBe(true);
+    // ...and is still honest that replies fall back to English for a
+    // language whose wording nobody has checked.
+    expect(policy.note).toMatch(/Replies fall back to English/i);
+  });
+
   it('labels the demonstration as a script, not a recording', () => {
     expect(DEMO_PROVIDER.kind).toBe('fixture');
     expect(DEMO_PROVIDER.label).toMatch(/nothing was recorded/i);
@@ -162,15 +172,34 @@ describe('language claims match what is configured', () => {
     expect(byCode.hi.sttReady).toBe(true);
     expect(byCode.ta.sttReady).toBe(false);
     expect(byCode.te.sttReady).toBe(false);
-    expect(byCode.ta.note).toMatch(/does not document support/i);
+    expect(byCode.ta.note).toMatch(/does not document this language/i);
   });
 
-  it('is honest that Tamil and Telugu extraction is not written yet', () => {
+  it('separates being able to reply from being able to understand', () => {
     const byCode = Object.fromEntries(languageSupport().map((l) => [l.code, l]));
-    expect(byCode.en.uiReady).toBe(true);
-    expect(byCode.ta.uiReady).toBe(false);
-    expect(byCode.ta.note).toMatch(/not written yet/i);
-    expect(byCode.ta.note).toMatch(/not as verified coverage/i);
+
+    // Every listed language can be replied to, because a catalogue exists.
+    for (const language of Object.values(byCode)) expect(language.repliesReady).toBe(true);
+
+    // Only English is reviewed, and only English is understood without a key.
+    expect(byCode.en.repliesReviewed).toBe(true);
+    expect(byCode.ta.repliesReviewed).toBe(false);
+    expect(byCode.ta.reviewNote).toMatch(/native speaker/i);
+
+    // All five catalogue languages are read by the built-in extractor, with
+    // no API key — by keyword matching, which the note says plainly.
+    for (const language of Object.values(byCode)) {
+      expect(language.understandsVia).toBe('rules');
+      expect(language.understandsReady).toBe(true);
+    }
+    expect(byCode.ta.note).toMatch(/keyword matching/i);
+    expect(byCode.ta.note).toMatch(/not full comprehension/i);
+  });
+
+  it('says plainly what happens for a language with no catalogue', () => {
+    const policy = unlistedLanguagePolicy();
+    expect(policy.supported).toBe(false);
+    expect(policy.note).toMatch(/Only the languages listed here are understood/i);
   });
 });
 
@@ -275,5 +304,130 @@ describe('spoken-number handling', () => {
       expect(food).toBeDefined();
       expect(food?.quantity ?? null).toBeNull();
     }
+  });
+});
+
+describe('the deterministic extractor reads more than English', () => {
+  const cases: Array<{
+    language: string;
+    text: string;
+    expectCategories: string[];
+    expectGroupSize: number | null;
+  }> = [
+    {
+      language: 'hi',
+      text: 'हमें पीने का पानी और खाना चाहिए। यहाँ बीस लोग हैं।',
+      expectCategories: ['drinking_water', 'meal_packs'],
+      expectGroupSize: 20,
+    },
+    {
+      language: 'es',
+      text: 'Necesitamos agua potable y comida para veinticinco personas.',
+      expectCategories: ['drinking_water', 'meal_packs'],
+      expectGroupSize: 25,
+    },
+    {
+      language: 'ta',
+      text: 'எங்களுக்கு குடிநீர் தேவை. இங்கே 15 பேர் இருக்கிறார்கள்.',
+      expectCategories: ['drinking_water'],
+      expectGroupSize: 15,
+    },
+    {
+      language: 'te',
+      text: 'మాకు తాగునీరు కావాలి. ఇక్కడ 30 మంది ఉన్నారు.',
+      expectCategories: ['drinking_water'],
+      expectGroupSize: 30,
+    },
+  ];
+
+  it.each(cases)('reads a $language request with no API key', async (testCase) => {
+    const provider = new RulesExtractionProvider();
+    const result = await provider.extract({
+      draft: emptyDraft(),
+      pendingQuestion: null,
+      userText: testCase.text,
+      language: 'en',
+      history: [],
+    });
+
+    const found = (result.update.items ?? []).map((i) => i.categoryId).sort();
+    for (const category of testCase.expectCategories) {
+      expect(found, `${testCase.language} should find ${category}`).toContain(category);
+    }
+    expect(result.update.groupSize).toBe(testCase.expectGroupSize);
+    expect(result.update.intent).toBe('need');
+
+    // The rule that holds in every language: people are not supplies.
+    for (const item of result.update.items ?? []) {
+      expect(item.quantity ?? null).toBeNull();
+    }
+  });
+
+  it('reads an explicit quantity in Spanish and Hindi', async () => {
+    const provider = new RulesExtractionProvider();
+    const spanish = await provider.extract({
+      draft: emptyDraft(),
+      pendingQuestion: null,
+      userText: 'Necesitamos 300 litros de agua potable.',
+      language: 'es',
+      history: [],
+    });
+    expect(spanish.update.items?.[0]).toMatchObject({
+      categoryId: 'drinking_water',
+      quantity: 300,
+    });
+
+    const hindi = await provider.extract({
+      draft: emptyDraft(),
+      pendingQuestion: null,
+      userText: 'हमें 50 लीटर पानी चाहिए।',
+      language: 'hi',
+      history: [],
+    });
+    expect(hindi.update.items?.[0]).toMatchObject({
+      categoryId: 'drinking_water',
+      quantity: 50,
+    });
+  });
+
+  it('refuses to convert an unrecognised unit in Spanish too', async () => {
+    const provider = new RulesExtractionProvider();
+    const result = await provider.extract({
+      draft: emptyDraft(),
+      pendingQuestion: null,
+      userText: 'Necesitamos 50 botellas de agua.',
+      language: 'es',
+      history: [],
+    });
+    const water = result.update.items?.find((i) => i.categoryId === 'drinking_water');
+    expect(water?.quantity ?? null).toBeNull();
+    expect(water?.quantityUncertain).toBe(true);
+    expect(water?.note).toMatch(/50 botellas/);
+  });
+
+  it('distinguishes an offer from a need in Spanish', async () => {
+    const provider = new RulesExtractionProvider();
+    const offer = await provider.extract({
+      draft: emptyDraft(),
+      pendingQuestion: null,
+      userText: 'Podemos donar 200 paquetes de comida.',
+      language: 'es',
+      history: [],
+    });
+    expect(offer.update.intent).toBe('offer');
+  });
+
+  it('says so when a script has no built-in vocabulary', async () => {
+    const provider = new RulesExtractionProvider();
+    const result = await provider.extract({
+      draft: emptyDraft(),
+      pendingQuestion: null,
+      userText: 'نحتاج إلى مياه الشرب لعشرين شخصا',
+      language: 'en',
+      history: [],
+    });
+    // It does not pretend to have understood Arabic.
+    expect(result.update.notes?.join(' ')).toMatch(/no vocabulary for/i);
+    expect(result.update.notes?.join(' ')).toMatch(/anthropic/i);
   });
 });

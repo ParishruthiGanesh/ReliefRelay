@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Alert, Badge, Button, Card, FieldLabel, Provenance, SectionHeading, Spinner } from './ui';
+import { LocationPicker, type ChosenLocation } from './LocationPicker';
+import { DraftEditor } from './DraftEditor';
 import { clearLocalDraft, loadLocalDraft, newIdempotencyKey, saveLocalDraft } from '@/lib/client/outbox';
 
 /**
@@ -74,6 +76,20 @@ interface Conversation {
     respondersNotified: boolean;
   } | null;
   providers: { extraction: { id: string; label: string; kind: string } | null };
+  draftDisplay: {
+    items: Array<{ categoryId: string; label: string; quantityLabel: string; note?: string }>;
+    groupSizeLabel: string | null;
+    placeLabel: string | null;
+    placeConfirmed: boolean;
+  };
+  languageState: {
+    replyingIn: string;
+    label: string;
+    reviewed: boolean;
+    reviewNote?: string;
+    switched: boolean;
+    needsModelForThisLanguage: boolean;
+  };
   turns: Array<{ role: 'user' | 'assistant'; text: string; createdAt: string; inputMode: string }>;
   submitted: { requestId: string; referenceCode: string; status: string } | null;
 }
@@ -87,20 +103,18 @@ interface ProviderStatus {
 interface LanguageOption {
   code: string;
   label: string;
-  uiReady: boolean;
+  englishName: string;
+  repliesReady: boolean;
+  repliesReviewed: boolean;
+  reviewNote?: string;
+  understandsReady: boolean;
+  understandsVia: 'rules' | 'model' | 'none';
   sttReady: boolean;
   ttsReady: boolean;
   note: string;
 }
 
 type MicState = 'idle' | 'requesting' | 'recording' | 'transcribing' | 'unavailable';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  meal_packs: 'Meal packs',
-  drinking_water: 'Drinking water',
-  hygiene_kits: 'Hygiene kits',
-  shelter_spaces: 'Shelter spaces',
-};
 
 interface BrowserRecognition {
   lang: string;
@@ -122,7 +136,14 @@ function getBrowserRecognition(): (new () => BrowserRecognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
+export function VoiceAssistant({
+  languages,
+  districtCentre,
+}: {
+  languages: LanguageOption[];
+  /** Where to open the map before the person has chosen anything. */
+  districtCentre: { lat: number; lng: number };
+}) {
   const [language, setLanguage] = useState('en');
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [providers, setProviders] = useState<ProviderStatus | null>(null);
@@ -141,6 +162,8 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
   const [speaking, setSpeaking] = useState(false);
   const [speechNote, setSpeechNote] = useState<string | null>(null);
 
+  const [showPicker, setShowPicker] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [demoLines, setDemoLines] = useState<Array<{ step: number; text: string; hint: string }>>([]);
   const [demoIndex, setDemoIndex] = useState(0);
   const [demoActive, setDemoActive] = useState(false);
@@ -161,7 +184,8 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
   const idempotencyKey = useRef<string>(newIdempotencyKey());
 
   const browserRecognitionAvailable = useMemo(() => getBrowserRecognition() !== null, []);
-  const selectedLanguage = languages.find((l) => l.code === language) ?? languages[0];
+  const activeLanguage = conversation?.languageState.replyingIn ?? language;
+  const selectedLanguage = languages.find((l) => l.code === activeLanguage) ?? languages[0];
 
   // ── session bootstrap, resuming a draft the server already holds ─────────
   const startConversation = useCallback(
@@ -449,18 +473,20 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
   );
 
   const chooseLocation = useCallback(
-    async (facilityId: string) => {
+    async (selection: { facilityId?: string; lat?: number; lng?: number; label?: string }) => {
       if (!conversation) return;
       setBusy(true);
       try {
         const response = await fetch(`/api/conversation/${conversation.conversationId}/location`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ facilityId }),
+          body: JSON.stringify(selection),
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body?.error?.message ?? 'That place could not be set.');
         setConversation(body.conversation);
+        setShowPicker(false);
+        setError(null);
       } catch (caught) {
         setError((caught as Error).message);
       } finally {
@@ -509,6 +535,12 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
   }, [demoIndex, demoLines]);
 
   const draft = conversation?.draft;
+  const display = conversation?.draftDisplay ?? {
+    items: [],
+    groupSizeLabel: null,
+    placeLabel: null,
+    placeConfirmed: false,
+  };
   const question = conversation?.question ?? null;
   const readback = conversation?.readback ?? null;
   const assistantText = conversation?.assistantText ?? '';
@@ -575,7 +607,7 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
             <select
               className="rr-input mt-1"
               id="language"
-              value={language}
+              value={conversation?.languageState.replyingIn ?? language}
               onChange={(event) => {
                 const next = event.target.value;
                 setLanguage(next);
@@ -586,12 +618,19 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
               {languages.map((option) => (
                 <option key={option.code} value={option.code}>
                   {option.label}
-                  {option.uiReady ? '' : ' — speech path only'}
+                  {option.englishName !== option.label ? ` (${option.englishName})` : ''}
+                  {option.understandsReady ? '' : ' — needs an AI key to be understood'}
                 </option>
               ))}
             </select>
             {selectedLanguage ? (
-              <p className="rr-hint">{selectedLanguage.note}</p>
+              <>
+                <p className="rr-hint">{selectedLanguage.note}</p>
+                <p className="rr-hint">
+                  You can also just speak or type in your own language — if it is one this server
+                  knows, it will answer in that language without you changing this.
+                </p>
+              </>
             ) : null}
           </div>
           <div>
@@ -660,6 +699,28 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
           </div>
         </div>
         {speechNote ? <p className="mt-2 text-xs text-ink-500">{speechNote}</p> : null}
+
+        {conversation?.languageState ? (
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-500">
+            <Badge tone="neutral">Replying in {conversation.languageState.label}</Badge>
+            {conversation.languageState.switched ? (
+              <Badge tone="teal">Switched to the language you used</Badge>
+            ) : null}
+            {!conversation.languageState.reviewed ? (
+              <span className="text-ember-700">
+                This wording was written for the prototype and has not been checked by a native
+                speaker. What gets recorded is unaffected — only how it reads.
+              </span>
+            ) : null}
+            {conversation.languageState.needsModelForThisLanguage ? (
+              <span className="text-ember-700">
+                This server has no built-in vocabulary for that language, so it may not have
+                understood you. Typing in a listed language, or configuring an AI key, will.
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+
         <p className="mt-2 text-xs text-ink-500">
           Nothing is spoken automatically. Everything the assistant says is shown here as text.
         </p>
@@ -681,7 +742,9 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
                   variant="secondary"
                   disabled={busy}
                   onClick={() => {
-                    if (question.field === 'location_choice') void chooseLocation(choice.value);
+                    if (question.field === 'location_choice') {
+                      void chooseLocation({ facilityId: choice.value });
+                    }
                     else void sendTurn(choice.label, 'text');
                   }}
                 >
@@ -714,11 +777,28 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
               </Button>
             ) : null}
             {question.field === 'location_choice' || question.field === 'location' ? (
-              <Link className="self-center text-sm font-semibold text-teal-700 underline" href="/find">
-                Choose a place from the map
-              </Link>
+              <Button variant="secondary" onClick={() => setShowPicker((v) => !v)}>
+                {showPicker ? 'Hide the map' : '📍 Use my location or the map'}
+              </Button>
             ) : null}
           </div>
+          {showPicker ? (
+            <div className="mt-4 border-t border-sand-200 pt-4">
+              <LocationPicker
+                busy={busy}
+                center={districtCentre}
+                confirmLabel="This is where I am"
+                onConfirm={(location: ChosenLocation) =>
+                  void chooseLocation({
+                    facilityId: location.facilityId,
+                    lat: location.facilityId ? undefined : location.lat,
+                    lng: location.facilityId ? undefined : location.lng,
+                    label: location.label,
+                  })
+                }
+              />
+            </div>
+          ) : null}
         </Card>
       ) : null}
 
@@ -871,22 +951,65 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
               ))}
             </ul>
           ) : null}
+          {/* A request with no place cannot be acted on, so the submit button
+              is not offered until there is one — rather than failing after
+              the person has pressed it. */}
+          {!draft?.locationText ? (
+            <div className="mt-4">
+              <Alert tone="attention" title="One thing is still needed">
+                A coordinator cannot act on a request without a place. Set it below and the submit
+                button will appear.
+              </Alert>
+            </div>
+          ) : null}
+
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="lg" disabled={busy} onClick={() => void confirmSubmission()}>
-              {busy ? 'Submitting…' : 'Yes, submit this request'}
-            </Button>
+            {draft?.locationText ? (
+              <Button size="lg" disabled={busy} onClick={() => void confirmSubmission()}>
+                {busy ? 'Submitting…' : 'Yes, submit this request'}
+              </Button>
+            ) : null}
             <Button variant="secondary" onClick={() => void speak(readback.summary)} disabled={muted}>
               Read it back to me
             </Button>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => void sendTurn('Actually, I need to change something.', 'text')}
-            >
-              Something is wrong
+            <Button variant="secondary" disabled={busy} onClick={() => setEditing((v) => !v)}>
+              {editing ? 'Stop editing' : 'Change what I asked for'}
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setShowPicker((v) => !v)}>
+              {showPicker ? 'Hide the map' : draft?.locationText ? 'Change the place' : '📍 Set the place'}
             </Button>
           </div>
+
+          {showPicker ? (
+            <div className="mt-4 border-t border-sand-200 pt-4">
+              <LocationPicker
+                busy={busy}
+                center={districtCentre}
+                confirmLabel="Use this place"
+                onConfirm={(location: ChosenLocation) =>
+                  void chooseLocation({
+                    facilityId: location.facilityId,
+                    lat: location.facilityId ? undefined : location.lat,
+                    lng: location.facilityId ? undefined : location.lng,
+                    label: location.label,
+                  })
+                }
+              />
+            </div>
+          ) : null}
         </Card>
+      ) : null}
+
+      {editing && draft && conversation ? (
+        <DraftEditor
+          conversationId={conversation.conversationId}
+          draft={{ items: draft.items, groupSize: draft.groupSize, urgency: draft.urgency }}
+          onCancel={() => setEditing(false)}
+          onSaved={(updated) => {
+            setConversation(updated as Conversation);
+            setEditing(false);
+          }}
+        />
       ) : null}
 
       {/* What has been recorded so far */}
@@ -899,25 +1022,20 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
             <div className="flex flex-wrap items-baseline gap-x-3 border-b border-sand-200 py-2">
               <dt className="min-w-[8rem] text-sm font-semibold text-ink-700">Resources</dt>
               <dd className="flex-1">
-                {draft.items.length === 0 ? (
+                {display.items.length === 0 ? (
                   <span className="text-ink-500">nothing yet</span>
                 ) : (
                   <ul className="space-y-1">
-                    {draft.items.map((item) => (
+                    {display.items.map((item) => (
                       <li key={item.categoryId}>
-                        {CATEGORY_LABELS[item.categoryId] ?? item.categoryId}:{' '}
-                        {item.quantity === null ? (
-                          <span className="text-ember-700">
-                            amount not yet known ({item.unit})
-                          </span>
-                        ) : (
-                          <>
-                            {item.quantity} {item.unit}
-                            {item.quantityUncertain ? (
-                              <span className="text-ember-700"> (unconfirmed)</span>
-                            ) : null}
-                          </>
-                        )}
+                        {item.label}:{' '}
+                        <span
+                          className={
+                            item.quantityLabel.match(/\d/) ? undefined : 'text-ember-700'
+                          }
+                        >
+                          {item.quantityLabel}
+                        </span>
                         {item.note ? (
                           <span className="block text-xs text-ink-500">{item.note}</span>
                         ) : null}
@@ -930,11 +1048,7 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
             <div className="flex flex-wrap items-baseline gap-x-3 border-b border-sand-200 py-2">
               <dt className="min-w-[8rem] text-sm font-semibold text-ink-700">People</dt>
               <dd className="flex-1">
-                {draft.groupSize === null ? (
-                  <span className="text-ink-500">not given</span>
-                ) : (
-                  `${draft.groupSize} ${draft.groupSize === 1 ? 'person' : 'people'}`
-                )}
+                {display.groupSizeLabel ?? <span className="text-ink-500">not given</span>}
                 <span className="block text-xs text-ink-500">
                   A group size is never used as a supply quantity.
                 </span>
@@ -943,8 +1057,8 @@ export function VoiceAssistant({ languages }: { languages: LanguageOption[] }) {
             <div className="flex flex-wrap items-baseline gap-x-3 py-2">
               <dt className="min-w-[8rem] text-sm font-semibold text-ink-700">Place</dt>
               <dd className="flex-1">
-                {draft.locationText ?? <span className="text-ink-500">not given</span>}
-                {draft.locationText && !draft.locationConfirmed ? (
+                {display.placeLabel ?? <span className="text-ink-500">not given</span>}
+                {display.placeLabel && !display.placeConfirmed ? (
                   <span className="block text-xs text-ember-700">Not yet confirmed.</span>
                 ) : null}
               </dd>

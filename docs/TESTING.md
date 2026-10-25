@@ -4,7 +4,7 @@
 npm run verify     # typecheck + 92 tests + 7 contract tests + production build
 ```
 
-Last full run: **105 passing** (Vitest, 11 files) · **7 passing** (Hardhat) · typecheck clean ·
+Last full run: **134 passing** (Vitest, 12 files) · **7 passing** (Hardhat) · typecheck clean ·
 production build clean · browser walkthrough clean.
 
 ---
@@ -39,6 +39,7 @@ production build clean · browser walkthrough clean.
 | `concurrency.test.ts` | 4 | Two-process race; stale-read refusal; burst of reservations; the database-level CHECK constraint |
 | `chain.test.ts` | 5 | Chain disabled; chain unreachable; appended corrections for shortfall and cancellation; hash explanation |
 | `chain-live.test.ts` | 1 | A real Hardhat node, real deployment, real transactions: 4 acknowledgements confirmed with tx hashes and block numbers |
+| `i18n.test.ts` | 12 | Every language defines every string with matching placeholders; the "nobody has been notified" denial survives translation in all five; script detection; refusing to switch language on a place name |
 | `body-limit.test.ts` | 5 | Oversized bodies refused with 413 before parsing; a dishonest `content-length` does not get a large body through; the audio endpoint keeps its own higher limit |
 | `validation-guarantees.test.ts` | 8 | The properties the security model depends on, re-verified across the zod 3 → 4 major upgrade: `.strict()` still rejects keys a model may not propose, defaults still apply, constraints and enums still bite |
 | `providers.test.ts` | 13 | Every fallback path, language-claim honesty, out-of-schema model replies, spoken-number handling |
@@ -93,6 +94,22 @@ These are worth listing because none of them were caught by reasoning about the 
 8. **Request bodies were parsed before being measured.** Schema limits are checked after the whole
    payload is in memory, so a public endpoint had no defence against a very large array. Now
    capped before any parser sees it.
+9. **Assigning a volunteer appeared to do nothing.** The assignment saved correctly, but no view
+   carried it, so the dropdown just reset and the coordinator saw no change. The commitment row
+   now names who is carrying it, or says plainly that nobody is.
+10. **The location question could be skipped, then blocked submission.** Someone who skipped it
+    reached the read-back, pressed submit, and was refused. Location is required to act on a
+    request, so the question is no longer skippable and the submit button does not appear until
+    there is a place.
+11. **"Ask for help" was missing from the header.** The product's primary action was reachable
+    only from the home page, so every other page read as being for responders and staff. Reported
+    by the person it was built for, which is the only reason it was found.
+12. **A place name switched the speaker's language.** "Riverside Primary School" contains an
+    English marker word, so a Hindi speaker answering the location question correctly would have
+    been switched to English. Latin-script detection now needs two independent signals.
+13. **Half the voice screen stayed English in a Hindi conversation.** The "recorded so far" panel
+    was rendered client-side from a hardcoded label table. It is now rendered on the server, where
+    the catalogue is.
 
 ---
 

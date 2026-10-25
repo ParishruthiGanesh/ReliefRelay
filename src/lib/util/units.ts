@@ -1,3 +1,15 @@
+import { t as translateMessage } from '@/lib/i18n/messages';
+
+/** Thin wrapper so a missing key falls through to the English constants here. */
+function translate(
+  language: string,
+  key: string,
+  params: Record<string, string | number> = {},
+): string | null {
+  const value = translateMessage(language, key, params);
+  return value === key ? null : value;
+}
+
 /**
  * Units are explicit and never converted. "25 people" is a group size, not 25
  * bottles; litres are never shown as bottles; beds are never shown as people.
@@ -32,8 +44,15 @@ export function unitLabelFor(categoryId: string): string {
   return entry.unitLabel;
 }
 
-export function categoryLabel(categoryId: string): string {
-  return CATEGORY_LABELS[categoryId] ?? categoryId;
+/**
+ * The display name of a resource category.
+ *
+ * Takes a language because this string is read aloud to the person asking for
+ * help, not only shown on a coordinator's screen.
+ */
+export function categoryLabel(categoryId: string, language = 'en'): string {
+  const translated = translate(language, `category.${categoryId}`);
+  return translated ?? CATEGORY_LABELS[categoryId] ?? categoryId;
 }
 
 /**
@@ -44,13 +63,19 @@ export function formatQuantity(
   quantity: number | null | undefined,
   categoryId: string,
   uncertain = false,
+  language = 'en',
 ): string {
-  const label = unitLabelFor(categoryId);
+  const label = translate(language, `unitLabel.${categoryId}`) ?? unitLabelFor(categoryId);
   if (quantity === null || quantity === undefined) {
-    return `quantity not yet known (${label})`;
+    return translate(language, 'quantity.unknown', { unitLabel: label })
+      ?? `quantity not yet known (${label})`;
   }
   const rounded = Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(1);
-  return uncertain ? `about ${rounded} ${label} (unconfirmed)` : `${rounded} ${label}`;
+  const key = uncertain ? 'quantity.about' : 'quantity.exact';
+  return (
+    translate(language, key, { amount: rounded, unitLabel: label })
+    ?? (uncertain ? `about ${rounded} ${label} (unconfirmed)` : `${rounded} ${label}`)
+  );
 }
 
 /** Coarsens a point for public maps: ~1km grid. Exact points stay private. */

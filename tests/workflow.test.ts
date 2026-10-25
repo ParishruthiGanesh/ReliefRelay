@@ -403,3 +403,77 @@ describe('the full demonstration scenario', () => {
     expect(reviewed.provenance.sourceLabel).toBe('Coordinator reviewed');
   });
 });
+
+describe('an assignment is visible to the coordinator who made it', () => {
+  it('shows who is carrying each commitment, and who is not', () => {
+    const db = freshDb();
+    const { requestId } = makeRequest(db, { items: [{ categoryId: 'meal_packs', quantity: 40 }] });
+    const itemId = itemIdFor(db, requestId, 'meal_packs');
+    const commitment = commitStock(db, {
+      requestItemId: itemId,
+      inventoryLotId: 'lot_aid_meals',
+      qty: 40,
+      approvedBy: 'usr_coordinator',
+    });
+
+    // Before anyone is assigned, the view says so rather than staying silent.
+    let view = getAllocations(db, requestId)[0];
+    expect(view.commitments[0].assignment).toBeNull();
+
+    const assignment = createAssignment(db, {
+      commitmentId: commitment.commitmentId,
+      volunteerId: 'usr_volunteer_1',
+      assignedBy: 'usr_coordinator',
+    });
+
+    // The whole point: the coordinator can now see the action took effect.
+    view = getAllocations(db, requestId)[0];
+    expect(view.commitments[0].assignment).toEqual({
+      id: assignment.assignmentId,
+      volunteerName: 'T. Nguyen (fictional approved volunteer)',
+      status: 'offered',
+    });
+
+    updateAssignment(db, {
+      assignmentId: assignment.assignmentId,
+      volunteerId: 'usr_volunteer_1',
+      status: 'accepted',
+    });
+    expect(getAllocations(db, requestId)[0].commitments[0].assignment?.status).toBe('accepted');
+
+    // Reassigning shows the new person, not the stood-down one.
+    createAssignment(db, {
+      commitmentId: commitment.commitmentId,
+      volunteerId: 'usr_volunteer_2',
+      assignedBy: 'usr_coordinator',
+    });
+    const after = getAllocations(db, requestId)[0].commitments[0].assignment;
+    expect(after?.volunteerName).toBe('P. Haddad (fictional approved volunteer)');
+    expect(after?.status).toBe('offered');
+  });
+
+  it('clears the assignment from view when the volunteer withdraws', () => {
+    const db = freshDb();
+    const { requestId } = makeRequest(db, { items: [{ categoryId: 'meal_packs', quantity: 40 }] });
+    const itemId = itemIdFor(db, requestId, 'meal_packs');
+    const commitment = commitStock(db, {
+      requestItemId: itemId,
+      inventoryLotId: 'lot_aid_meals',
+      qty: 40,
+      approvedBy: 'usr_coordinator',
+    });
+    const assignment = createAssignment(db, {
+      commitmentId: commitment.commitmentId,
+      volunteerId: 'usr_volunteer_1',
+      assignedBy: 'usr_coordinator',
+    });
+    updateAssignment(db, {
+      assignmentId: assignment.assignmentId,
+      volunteerId: 'usr_volunteer_1',
+      status: 'withdrawn',
+    });
+    // Nobody is carrying it, and the dashboard must say that rather than
+    // still naming the person who dropped out.
+    expect(getAllocations(db, requestId)[0].commitments[0].assignment).toBeNull();
+  });
+});

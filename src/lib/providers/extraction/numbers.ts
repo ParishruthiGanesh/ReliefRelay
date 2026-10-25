@@ -11,9 +11,20 @@ const TENS: Record<string, number> = {
   seventy: 70, eighty: 80, ninety: 90,
 };
 
-/** Rewrites number words into digits so one set of patterns handles both. */
-export function digitize(text: string): string {
-  let out = text.toLowerCase();
+/**
+ * Rewrites number words into digits so one set of patterns handles both.
+ *
+ * `extraWords` carries the language's own number words; Devanagari, Tamil and
+ * Telugu digits are normalised first because a speech service may return
+ * either form.
+ */
+export function digitize(text: string, extraWords: Record<string, number> = {}): string {
+  let out = normaliseDigits(text).toLowerCase();
+
+  // Longest first, so "veinticinco" is not eaten by "cinco".
+  for (const [word, value] of Object.entries(extraWords).sort((a, b) => b[0].length - a[0].length)) {
+    out = out.split(word.toLowerCase()).join(String(value));
+  }
 
   // "twenty-five" / "twenty five" -> "25"
   for (const [tensWord, tensValue] of Object.entries(TENS)) {
@@ -34,8 +45,24 @@ export function digitize(text: string): string {
   return out;
 }
 
-export function firstNumber(text: string): number | null {
-  const match = digitize(text).match(/\b(\d{1,7})(?:\.(\d{1,2}))?\b/);
+/** Indic digit forms normalised to 0-9. */
+export function normaliseDigits(text: string): string {
+  const ranges: Array<[number, number]> = [
+    [0x0966, 0x096f], // Devanagari
+    [0x0be6, 0x0bef], // Tamil
+    [0x0c66, 0x0c6f], // Telugu
+  ];
+  return text.replace(/[\u0966-\u096f\u0be6-\u0bef\u0c66-\u0c6f]/g, (char) => {
+    const code = char.codePointAt(0)!;
+    for (const [start, end] of ranges) {
+      if (code >= start && code <= end) return String(code - start);
+    }
+    return char;
+  });
+}
+
+export function firstNumber(text: string, extraWords: Record<string, number> = {}): number | null {
+  const match = digitize(text, extraWords).match(/\b(\d{1,7})(?:\.(\d{1,2}))?\b/);
   if (!match) return null;
   const value = Number(match[2] ? `${match[1]}.${match[2]}` : match[1]);
   return Number.isFinite(value) ? value : null;

@@ -313,7 +313,7 @@ export function publicNeedSummaries(db: DB): PublicNeedSummary[] {
       publicLat: row.public_lat,
       publicLng: row.public_lng,
       areaLabel: row.facility_name ?? 'Riverbend District (area generalised)',
-      categories: (JSON.parse(row.categories) as string[]).map(categoryLabel),
+      categories: (JSON.parse(row.categories) as string[]).map((categoryId) => categoryLabel(categoryId)),
       createdAge: formatAge(row.created_at),
       hasUnmetNeed: allocations.some((a) => a.outstandingQty === null || a.outstandingQty > 0),
     };

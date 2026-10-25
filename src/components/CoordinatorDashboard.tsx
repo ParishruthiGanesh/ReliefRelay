@@ -34,6 +34,7 @@ interface Commitment {
   status: string;
   receivedQty: number;
   dispatchedQty: number;
+  assignment: { id: string; volunteerName: string; status: string } | null;
 }
 
 interface Allocation {
@@ -728,10 +729,31 @@ function RequestAllocationPanel({
                       : ''}
                   </p>
 
+                  {/* Who is carrying it. Assigning used to save correctly and
+                      show nothing, which read as the action having failed. */}
+                  {commitment.assignment ? (
+                    <p className="mt-1 text-sm text-ink-700">
+                      <Badge tone={commitment.assignment.status === 'accepted' ? 'good' : 'warn'}>
+                        {commitment.assignment.status === 'accepted'
+                          ? 'Accepted by'
+                          : commitment.assignment.status === 'completed'
+                            ? 'Completed by'
+                            : 'Offered to'}
+                      </Badge>{' '}
+                      {commitment.assignment.volunteerName}
+                      {commitment.assignment.status === 'offered'
+                        ? ' — waiting for them to accept'
+                        : ''}
+                    </p>
+                  ) : ['committed', 'dispatched'].includes(commitment.status) ? (
+                    <p className="mt-1 text-sm text-ink-500">No delivery team assigned yet.</p>
+                  ) : null}
+
                   {['committed', 'dispatched'].includes(commitment.status) ? (
                     <div className="mt-2 flex flex-wrap items-end gap-2">
-                      {commitment.status === 'committed' ? (
+                      {['committed', 'dispatched'].includes(commitment.status) ? (
                         <>
+                          {commitment.status === 'committed' ? (
                           <Button
                             disabled={busy}
                             variant="secondary"
@@ -750,16 +772,20 @@ function RequestAllocationPanel({
                           >
                             Record dispatch
                           </Button>
+                          ) : null}
                           {volunteers.length > 0 ? (
                             <div>
                               <FieldLabel htmlFor={`vol-${commitment.id}`}>
-                                Assign an approved volunteer
+                                {commitment.assignment
+                                  ? 'Reassign to another approved volunteer'
+                                  : 'Assign an approved volunteer'}
                               </FieldLabel>
                               <select
                                 className="rr-input mt-1"
                                 id={`vol-${commitment.id}`}
                                 onChange={(e) => {
                                   if (!e.target.value) return;
+                                  const chosen = volunteers.find((v) => v.id === e.target.value);
                                   void onAct(
                                     {
                                       action: 'assign',
@@ -768,7 +794,7 @@ function RequestAllocationPanel({
                                       instructions:
                                         'Collect from the hub, deliver to the shelter desk, ask for the duty warden.',
                                     },
-                                    'Delivery team assigned.',
+                                    `Assigned to ${chosen?.displayName ?? 'the volunteer'}. They now see it under "My deliveries" and must accept it.`,
                                   );
                                 }}
                                 value=""

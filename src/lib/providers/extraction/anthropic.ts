@@ -44,6 +44,7 @@ Allowed keys (all optional, omit anything you did not hear):
   cancelRequest: true only if they clearly asked to cancel
   notes: array of short strings for a coordinator
   reasoning: one short sentence on how you read it
+  detectedLanguage: BCP-47 code of the language the person used
 
 Hard rules:
 - NEVER derive a supply quantity from a group size. "water for 25 people" is
@@ -52,7 +53,17 @@ Hard rules:
   set quantity null, quantityUncertain true, and put what they said in note.
 - If the person corrects an earlier number, return the NEW value.
 - Never invent a quantity, a place, or coordinates. Omit what you did not hear.
-- Return ONLY keys from the list above.`;
+- Return ONLY keys from the list above.
+
+Language:
+- The person may speak or write in ANY language. Understand it whatever it is.
+- Extract into the ENGLISH field values listed above regardless of the input
+  language: categoryId is always "meal_packs" and never a translation of it.
+- locationText keeps the person's OWN words for the place, in their own
+  language and script. Do not translate a place name.
+- Set detectedLanguage to the BCP-47 code of the language they used
+  ("en", "hi", "ta", "te", "es", "bn", "ar", "sw", ...). This decides which
+  language they are answered in, so only set it when you are confident.`;
 
 export const ANTHROPIC_PROVIDER: ProviderInfo = {
   id: 'anthropic',

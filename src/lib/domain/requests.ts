@@ -302,30 +302,43 @@ export function getRequestItems(db: DB, requestId: string): RequestItemRow[] {
     .all(requestId) as RequestItemRow[];
 }
 
+export interface CommitmentView {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  qty: number;
+  unit: string;
+  status: CommitmentStatus;
+  receivedQty: number;
+  dispatchedQty: number;
+  createdAt: string;
+  /** Who is carrying this, if anyone. Null when nobody has been assigned. */
+  assignment: { id: string; volunteerName: string; status: string } | null;
+}
+
 export interface ItemWithAllocation extends ItemAllocation {
-  commitments: Array<{
-    id: string;
-    organizationId: string;
-    organizationName: string;
-    qty: number;
-    unit: string;
-    status: CommitmentStatus;
-    receivedQty: number;
-    dispatchedQty: number;
-    createdAt: string;
-  }>;
+  commitments: CommitmentView[];
 }
 
 /** Assembles per-item allocation facts from stock, commitment and receipt rows. */
 export function getAllocations(db: DB, requestId: string): ItemWithAllocation[] {
   const items = getRequestItems(db, requestId);
+  // The current assignment is joined in because a coordinator who has just
+  // assigned a delivery needs to see that it happened. Without it the action
+  // completes silently and reads as broken.
   const commitments = db
     .prepare(
       `SELECT c.*, o.name AS org_name,
               COALESCE((SELECT SUM(r.qty_received) FROM receipts r WHERE r.commitment_id = c.id), 0) AS received_qty,
-              COALESCE((SELECT SUM(d.qty) FROM dispatches d WHERE d.commitment_id = c.id), 0) AS dispatched_qty
+              COALESCE((SELECT SUM(d.qty) FROM dispatches d WHERE d.commitment_id = c.id), 0) AS dispatched_qty,
+              a.id AS assignment_id, a.status AS assignment_status, au.display_name AS assignee_name
          FROM commitments c
          JOIN organizations o ON o.id = c.organization_id
+         LEFT JOIN assignments a
+           ON a.id = (SELECT id FROM assignments
+                       WHERE commitment_id = c.id AND status IN ('offered','accepted','completed')
+                       ORDER BY created_at DESC LIMIT 1)
+         LEFT JOIN users au ON au.id = a.volunteer_id
         WHERE c.request_id = ?
         ORDER BY c.created_at`,
     )
@@ -340,6 +353,9 @@ export function getAllocations(db: DB, requestId: string): ItemWithAllocation[] 
     received_qty: number;
     dispatched_qty: number;
     created_at: string;
+    assignment_id: string | null;
+    assignment_status: string | null;
+    assignee_name: string | null;
   }>;
 
   return items.map((item) => {
@@ -371,6 +387,14 @@ export function getAllocations(db: DB, requestId: string): ItemWithAllocation[] 
         receivedQty: c.received_qty,
         dispatchedQty: c.dispatched_qty,
         createdAt: c.created_at,
+        assignment:
+          c.assignment_id && c.assignee_name
+            ? {
+                id: c.assignment_id,
+                volunteerName: c.assignee_name,
+                status: c.assignment_status ?? 'offered',
+              }
+            : null,
       })),
     };
   });

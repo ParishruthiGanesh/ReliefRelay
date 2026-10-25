@@ -1,4 +1,5 @@
 import { categoryLabel } from '@/lib/util/units';
+import { t } from '@/lib/i18n/messages';
 import type { RequestDraft } from '@/lib/validation/schemas';
 
 /**
@@ -41,6 +42,12 @@ export interface QuestionContext {
   draft: RequestDraft;
   askedFields: string[];
   questionCount: number;
+  /** Which catalogue to word the question from. Defaults to the draft's. */
+  language?: string;
+}
+
+function lang(ctx: QuestionContext): string {
+  return ctx.language ?? ctx.draft.language;
 }
 
 function alreadyHandled(ctx: QuestionContext, field: string): boolean {
@@ -67,7 +74,7 @@ function pickEssential(ctx: QuestionContext): AssistantQuestion | null {
   if (draft.items.length === 0 && !alreadyHandled(ctx, 'resources')) {
     return {
       field: 'resources',
-      text: 'What do you need most right now? You can say food, drinking water, hygiene kits, or shelter space.',
+      text: t(lang(ctx), 'q.resources'),
       answerKind: 'text',
       allowSkip: true,
     };
@@ -76,11 +83,11 @@ function pickEssential(ctx: QuestionContext): AssistantQuestion | null {
   if (!draft.intent && !alreadyHandled(ctx, 'intent')) {
     return {
       field: 'intent',
-      text: 'Are you asking for supplies, or offering to provide them?',
+      text: t(lang(ctx), 'q.intent'),
       answerKind: 'choice',
       choices: [
-        { value: 'need', label: 'I need supplies' },
-        { value: 'offer', label: 'I can provide supplies' },
+        { value: 'need', label: t(lang(ctx), 'q.intent.need') },
+        { value: 'offer', label: t(lang(ctx), 'q.intent.offer') },
       ],
       allowSkip: false,
     };
@@ -89,9 +96,14 @@ function pickEssential(ctx: QuestionContext): AssistantQuestion | null {
   if (!draft.locationText && !alreadyHandled(ctx, 'location')) {
     return {
       field: 'location',
-      text: 'Where are you? You can say the name of the place, type it, or choose it on the map.',
+      // Not skippable: a request with no location cannot be acted on at all,
+      // and `confirmAndSubmit` refuses one. Offering "I don't know" here only
+      // led people to a read-back that then would not submit. The map, the
+      // device's own location and the known-place list are all offered
+      // alongside, so there is always a way to answer.
+      text: t(lang(ctx), 'q.location'),
       answerKind: 'text',
-      allowSkip: true,
+      allowSkip: false,
     };
   }
 
@@ -107,8 +119,11 @@ function pickEssential(ctx: QuestionContext): AssistantQuestion | null {
       field: 'location_choice',
       text:
         draft.locationCandidates.length === 2
-          ? `I found two places that could match. Which one are you at — ${draft.locationCandidates[0].label}, or ${draft.locationCandidates[1].label}?`
-          : 'I found a few places that could match. Which one are you at?',
+          ? t(lang(ctx), 'q.location_choice.two', {
+              a: draft.locationCandidates[0].label,
+              b: draft.locationCandidates[1].label,
+            })
+          : t(lang(ctx), 'q.location_choice.many'),
       answerKind: 'choice',
       choices: draft.locationCandidates.map((c) => ({
         value: c.facilityId ?? c.label,
@@ -136,7 +151,7 @@ function pickHelpful(ctx: QuestionContext): AssistantQuestion | null {
   ) {
     return {
       field: 'group_scope',
-      text: `Is this request for the whole group of ${draft.groupSize}?`,
+      text: t(lang(ctx), 'q.group_scope.yesno', { n: draft.groupSize! }),
       answerKind: 'yes_no',
       allowSkip: true,
     };
@@ -154,7 +169,10 @@ function pickHelpful(ctx: QuestionContext): AssistantQuestion | null {
   if (ambiguous) {
     return {
       field: 'quantity_ambiguous',
-      text: `For ${categoryLabel(ambiguous.categoryId).toLowerCase()}, how much do you need in ${ambiguous.unit}? If you are not sure, say \u201cI don\u2019t know\u201d and a coordinator will work it out.`,
+      text: t(lang(ctx), 'q.quantity_ambiguous', {
+        resource: categoryLabel(ambiguous.categoryId, lang(ctx)).toLowerCase(),
+        unit: t(lang(ctx), `unitLabel.${ambiguous.categoryId}`),
+      }),
       answerKind: 'number',
       allowSkip: true,
     };

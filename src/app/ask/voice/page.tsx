@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { VoiceAssistant } from '@/components/VoiceAssistant';
 import { languageSupport } from '@/lib/providers/languages';
+import { DISTRICT } from '@/lib/db/seed-data';
 import { Alert, FictionalNotice } from '@/components/ui';
 
 export const metadata = { title: 'Speak to the assistant — ReliefRelay' };
@@ -23,7 +24,10 @@ export default function VoicePage() {
         not contact responders on your behalf.
       </Alert>
 
-      <VoiceAssistant languages={languages} />
+      <VoiceAssistant
+        districtCentre={{ lat: DISTRICT.centerLat, lng: DISTRICT.centerLng }}
+        languages={languages}
+      />
 
       <p className="text-sm text-ink-500">
         Prefer to type? <Link className="underline" href="/ask/form">Use the short form instead.</Link>

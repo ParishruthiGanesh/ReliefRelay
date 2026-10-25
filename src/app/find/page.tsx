@@ -125,7 +125,7 @@ export default function FindPage() {
                   {facility.resourceCategories.length > 0 ? (
                     <div className="flex gap-2">
                       <dt className="font-semibold text-ink-700">Supplies on site</dt>
-                      <dd>{facility.resourceCategories.map(categoryLabel).join(', ')}</dd>
+                      <dd>{facility.resourceCategories.map((categoryId) => categoryLabel(categoryId)).join(', ')}</dd>
                     </div>
                   ) : null}
                   {facility.resourcesNote ? (
@@ -182,7 +182,7 @@ export default function FindPage() {
               {facility.resourceCategories.length > 0 ? (
                 <p className="mt-2 text-sm">
                   <span className="font-semibold text-ink-700">Uncommitted stock in: </span>
-                  {facility.resourceCategories.map(categoryLabel).join(', ')}
+                  {facility.resourceCategories.map((categoryId) => categoryLabel(categoryId)).join(', ')}
                 </p>
               ) : (
                 <p className="mt-2 text-sm text-ink-500">No uncommitted stock recorded here.</p>

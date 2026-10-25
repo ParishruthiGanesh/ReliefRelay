@@ -1,4 +1,5 @@
 import { categoryLabel, formatQuantity } from '@/lib/util/units';
+import { t } from '@/lib/i18n/messages';
 import type { RequestDraft } from '@/lib/validation/schemas';
 import { computeMissingFields } from '@/lib/domain/requests';
 
@@ -19,49 +20,53 @@ export interface Readback {
   caveats: string[];
 }
 
-function describeItems(draft: RequestDraft): string {
+function describeItems(draft: RequestDraft, language: string): string {
   if (draft.items.length === 0) return 'supplies not yet specified';
   const parts = draft.items.map((item) => {
-    const label = categoryLabel(item.categoryId).toLowerCase();
+    const label = categoryLabel(item.categoryId, language).toLowerCase();
     if (item.quantity === null) return label;
-    return `${formatQuantity(item.quantity, item.categoryId, item.quantityUncertain)}`;
+    return formatQuantity(item.quantity, item.categoryId, item.quantityUncertain, language);
   });
-  if (parts.length === 1) return parts[0];
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  // Joined with a comma in every language; the final conjunction varies too
+  // much to be worth a per-language rule for a list of at most four items.
+  return parts.join(', ');
 }
 
-export function buildReadback(draft: RequestDraft): Readback {
+export function buildReadback(draft: RequestDraft, language: string = draft.language): Readback {
   const missingFields = computeMissingFields(draft);
   const caveats: string[] = [];
 
-  const items = describeItems(draft);
+  const items = describeItems(draft, language);
   const forWhom =
     draft.groupSize !== null
-      ? ` for ${draft.groupSize} ${draft.groupSize === 1 ? 'person' : 'people'}`
+      ? t(language, 'readback.for_people', {
+          n: draft.groupSize,
+          people: t(language, draft.groupSize === 1 ? 'people.one' : 'people.many'),
+        })
       : '';
-  const place = draft.locationText ? ` at ${draft.locationText}` : '';
+  const place = draft.locationText
+    ? t(language, 'readback.at_place', { place: draft.locationText })
+    : '';
 
   const opening =
     draft.intent === 'offer'
-      ? `You are offering ${items}${place}.`
-      : `Your request is for ${items}${forWhom}${place}.`;
+      ? t(language, 'readback.offer', { items, place })
+      : t(language, 'readback.request', { items, forWhom, place });
 
   if (draft.items.some((i) => i.quantity === null || i.quantityUncertain)) {
-    caveats.push('Supply quantities still need coordinator confirmation.');
+    caveats.push(t(language, 'caveat.quantities'));
   }
   if (draft.locationText && !draft.locationConfirmed) {
-    caveats.push('The exact place has not been confirmed, so a coordinator will check it.');
+    caveats.push(t(language, 'caveat.location'));
   }
   if (draft.dangerReported) {
-    caveats.push(
-      'You reported immediate danger. Please contact emergency services by phone — this app cannot send rescuers and has not contacted anyone for you.',
-    );
+    caveats.push(t(language, 'caveat.danger'));
   }
   if (draft.skippedFields.length > 0) {
-    caveats.push('Some questions were skipped; a coordinator will see what is missing.');
+    caveats.push(t(language, 'caveat.skipped'));
   }
 
-  const summary = [opening, ...caveats, 'Shall I submit it?'].join(' ');
+  const summary = [opening, ...caveats, t(language, 'readback.submit_question')].join(' ');
 
   const lines: Array<{ label: string; value: string; caution?: boolean }> = [];
   lines.push({
@@ -70,10 +75,14 @@ export function buildReadback(draft: RequestDraft): Readback {
     // resource rather than as a repeated disclaimer.
     value: draft.items.length
       ? draft.items
-          .map((i) =>
-            i.quantity === null
-              ? `${categoryLabel(i.categoryId)}: amount not yet known`
-              : `${categoryLabel(i.categoryId)}: ${formatQuantity(i.quantity, i.categoryId, i.quantityUncertain)}`,
+          .map(
+            (i) =>
+              `${categoryLabel(i.categoryId, language)}: ${formatQuantity(
+                i.quantity,
+                i.categoryId,
+                i.quantityUncertain,
+                language,
+              )}`,
           )
           .join('\n')
       : 'not yet specified',
@@ -82,7 +91,9 @@ export function buildReadback(draft: RequestDraft): Readback {
   if (draft.groupSize !== null) {
     lines.push({
       label: 'Group size',
-      value: `${draft.groupSize} ${draft.groupSize === 1 ? 'person' : 'people'}${draft.groupSizeUncertain ? ' (approximate)' : ''}`,
+      value: `${draft.groupSize} ${t(language, draft.groupSize === 1 ? 'people.one' : 'people.many')}${
+        draft.groupSizeUncertain ? ' (approximate)' : ''
+      }`,
     });
   }
   lines.push({
@@ -105,8 +116,8 @@ export function buildReadback(draft: RequestDraft): Readback {
  * The message after a successful save. Deliberately flat: a reference code and
  * the true status. No "help is on the way".
  */
-export function submissionConfirmation(referenceCode: string): string {
-  return `Your request has been submitted. Your reference is ${referenceCode}. A coordinator has not yet accepted it.`;
+export function submissionConfirmation(referenceCode: string, language = 'en'): string {
+  return t(language, 'submitted.confirmation', { reference: referenceCode });
 }
 
 export function offlineNotice(): string {

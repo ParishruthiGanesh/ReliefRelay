@@ -224,3 +224,102 @@ describe('the voice conversation from the brief', () => {
     expect(after.draft.locationText).toContain('Old Bridge');
   });
 });
+
+describe('the assistant replies in the language it was spoken to', () => {
+  it('runs a whole Hindi conversation and submits in Hindi', async () => {
+    const db = freshDb();
+    const started = startConversation(db, { language: 'hi', mode: 'request' });
+    // Even the opening line is in the chosen language.
+    expect(started.assistantText).toMatch(/[ऀ-ॿ]/);
+
+    let view = await submitTurn(db, started.conversationId, {
+      text: 'हमें पीने का पानी और खाना चाहिए। यहाँ बीस लोग हैं।',
+      inputMode: 'voice',
+    });
+
+    // Understanding is the rule extractor's limit, but the *reply* is Hindi.
+    expect(view.assistantText).toMatch(/[ऀ-ॿ]/);
+    expect(view.languageState.replyingIn).toBe('hi');
+    // And it is honest that this wording has not been checked by a speaker.
+    expect(view.languageState.reviewed).toBe(false);
+    expect(view.languageState.reviewNote).toMatch(/native speaker/i);
+
+    // The location question, in Hindi, with no way to skip it.
+    expect(view.question?.field).toBe('location');
+    expect(view.question?.allowSkip).toBe(false);
+
+    view = selectLocation(db, started.conversationId, { facilityId: 'fac_riverside_primary' });
+    const ready = view.state === 'confirming' ? view : viewConversation(db, started.conversationId);
+    if (ready.readback) {
+      expect(ready.readback.summary).toMatch(/[ऀ-ॿ]/);
+      // The quantity caveat survives translation rather than being dropped.
+      expect(ready.readback.caveats.join(' ')).toMatch(/[ऀ-ॿ]/);
+    }
+  });
+
+  it('switches to the language actually spoken, overriding the menu choice', async () => {
+    const db = freshDb();
+    // Chose English, then spoke Tamil.
+    const started = startConversation(db, { language: 'en', mode: 'request' });
+    const view = await submitTurn(db, started.conversationId, {
+      text: 'எங்களுக்கு குடிநீர் தேவை. இங்கே பதினைந்து பேர் இருக்கிறார்கள்.',
+      inputMode: 'voice',
+    });
+
+    expect(view.languageState.replyingIn).toBe('ta');
+    expect(view.languageState.switched).toBe(true);
+    expect(view.assistantText).toMatch(/[஀-௿]/);
+    expect(view.draft.language).toBe('ta');
+  });
+
+  it('answers a Spanish request in Spanish, including the confirmation', async () => {
+    const db = freshDb();
+    const started = startConversation(db, { language: 'es', mode: 'request' });
+    await submitTurn(db, started.conversationId, {
+      text: 'Necesitamos agua potable para 12 personas.',
+      inputMode: 'text',
+    });
+    const located = selectLocation(db, started.conversationId, {
+      facilityId: 'fac_old_bridge_hall',
+    });
+    const ready = located.state === 'confirming' ? located : viewConversation(db, started.conversationId);
+
+    const result = confirmAndSubmit(db, started.conversationId, {
+      idempotencyKey: 'spanish-key-abcdef12',
+      confirmedSummary: ready.readback?.summary ?? 'resumen',
+      acceptIncomplete: true,
+    });
+
+    // The one sentence that must never overstate, in Spanish.
+    expect(result.assistantText).toMatch(/Tu solicitud se ha enviado/);
+    expect(result.assistantText).toContain(result.referenceCode);
+    expect(result.assistantText).toMatch(/ning[uú]n coordinador la ha aceptado/i);
+    expect(result.assistantText).not.toMatch(/en camino|ayuda viene/i);
+  });
+
+  it('keeps the danger denial intact when the conversation is not in English', async () => {
+    const db = freshDb();
+    const started = startConversation(db, { language: 'hi', mode: 'request' });
+    const view = await submitTurn(db, started.conversationId, {
+      text: 'My neighbour is trapped on the roof and the water is rising fast.',
+      inputMode: 'voice',
+    });
+    expect(view.draft.dangerReported).toBe(true);
+    expect(view.emergency?.respondersNotified).toBe(false);
+    // Hindi for "has not contacted anyone".
+    expect(view.assistantText).toMatch(/संपर्क नहीं किया/);
+  });
+
+  it('never turns a group size into a quantity in any language', async () => {
+    const db = freshDb();
+    for (const [language, text] of [
+      ['es', 'Necesitamos agua potable para 25 personas.'],
+      ['en', 'We need drinking water for 25 people.'],
+    ] as const) {
+      const started = startConversation(db, { language, mode: 'request' });
+      const view = await submitTurn(db, started.conversationId, { text, inputMode: 'text' });
+      const water = view.draft.items.find((i) => i.categoryId === 'drinking_water');
+      if (water) expect(water.quantity).toBeNull();
+    }
+  });
+});

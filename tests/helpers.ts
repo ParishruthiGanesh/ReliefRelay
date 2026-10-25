@@ -42,8 +42,8 @@ export function makeRequest(
     groupSize: opts.groupSize ?? null,
     locationText: opts.locationText ?? 'Riverside Primary School',
     resolvedFacilityId: opts.facilityId ?? 'fac_riverside_primary',
-    resolvedLat: 0.028,
-    resolvedLng: -30.031,
+    resolvedLat: 41.99,
+    resolvedLng: -91.675,
     locationConfirmed: opts.confirmed ?? true,
   });
   return createRequest(db, draft, {

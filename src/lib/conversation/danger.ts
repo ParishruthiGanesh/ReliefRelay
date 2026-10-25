@@ -9,6 +9,8 @@
  * escalate it to the established responders.
  */
 
+import { t } from '@/lib/i18n/messages';
+
 const DANGER_PATTERNS: Array<{ re: RegExp; label: string }> = [
   { re: /\b(drown|drowning|going under)\b/i, label: 'drowning' },
   { re: /\b(trapped|stuck)\b.*\b(roof|attic|upstairs|car|house|inside)\b/i, label: 'trapped' },
@@ -51,16 +53,11 @@ export interface EmergencyGuidance {
   respondersNotified: false;
 }
 
-export function emergencyGuidance(labels: string[]): EmergencyGuidance {
-  const what = labels.length > 0 ? labels.join(', ') : 'immediate danger';
+export function emergencyGuidance(labels: string[], language = 'en'): EmergencyGuidance {
+  const what = labels.length > 0 ? labels.join(', ') : t(language, 'danger.generic');
   return {
-    headline: 'This sounds like an emergency',
-    body:
-      `You described ${what}. Please contact emergency services now by phone if you can — ` +
-      'they are the only people who can send a rescue team. ReliefRelay coordinates supplies ' +
-      'and shelter; it cannot send rescuers and has not contacted anyone on your behalf. ' +
-      'You can still record what you need here, and a coordinator will see that you reported ' +
-      'immediate danger so they can escalate it to the responders they work with.',
+    headline: t(language, 'danger.headline'),
+    body: t(language, 'danger.body', { what }),
     emergencyNumber: process.env.EMERGENCY_NUMBER ?? '112',
     emergencyLabel:
       process.env.EMERGENCY_LABEL ?? 'Local emergency services (configure for your region)',

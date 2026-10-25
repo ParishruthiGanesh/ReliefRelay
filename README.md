@@ -11,10 +11,11 @@ back, and submitting only after the person confirms.
 > responders on anyone's behalf. Every district, facility, organisation, person and advisory in it
 > is fictional.
 
-The fictional Riverbend District sits at coordinates in open ocean, chosen so it can never be
-mistaken for a real place. Map tiles there show only water — the markers, shelter positions and
-advisory areas are all real and correctly placed relative to each other, there is simply no land
-beneath them.
+The fictional Riverbend District is placed on real land along the Cedar River in Iowa, a
+genuinely flood-prone area, so the map shows streets and a river a person can orient by. Every
+facility name and address carries "(fictional)" and every screen carries the fictional-data
+badge; no real shelter, hub or organisation is named anywhere. To move it, change `DISTRICT` and
+the facility coordinates in `src/lib/db/seed-data.ts` and run `npm run db:reset`.
 
 ---
 
@@ -169,6 +170,8 @@ The running app reproduces this table at `/about` from its actual configuration.
    whether the request covers the whole group, reads it back, and submits on confirmation.
    It never turns 25 people into 25 of anything.
 4. A coordinator reviews it. Committing stock is **refused** until a human confirms a quantity.
+   Assigning a volunteer names them on the commitment row, so the coordinator can see it took
+   effect.
 5. Two organisations commit 60 and 40 of 100 meal packs. Neither can take the other's stock.
 6. A delivery of 60 arrives as 50. The outstanding need automatically becomes 10, with a visible
    discrepancy, and the 10 that never left returns to available stock.
@@ -233,6 +236,52 @@ A blockchain record preserves that an acknowledgement was made. It is **not** in
 that goods changed hands, and it does not prevent anyone acknowledging something untrue.
 
 ---
+
+## Languages
+
+The assistant answers in the language it was spoken to, and switches by itself when the script is
+decisive — someone who picked English and then speaks Tamil is answered in Tamil.
+
+Three separate questions, reported separately at `/about`, because conflating them is how products
+end up claiming coverage they do not have:
+
+| Language | Replies | Understood without an API key | Speech recognition |
+| --- | --- | --- | --- |
+| English | Reviewed | Yes | Whisper or Deepgram |
+| Hindi | Written, awaiting native review | Yes | Whisper or Deepgram |
+| Spanish | Written, awaiting native review | Yes | Whisper or Deepgram |
+| Tamil | Written, awaiting native review | Yes | Whisper only |
+| Telugu | Written, awaiting native review | Yes | Whisper only |
+| Anything else | English | Only with `ANTHROPIC_API_KEY` | Depends on the provider |
+
+"Understood without an API key" means the built-in extractor has a vocabulary for that language —
+keyword matching for resources, quantities and group size, not full comprehension. Claude reads
+any language when configured, and the interface always reports which extractor actually ran.
+
+**On translation quality.** Only the English wording has been checked by a native speaker. The
+others were written for this prototype and are labelled in the interface as awaiting review,
+because a mistranslated question in a relief app is a real harm rather than a cosmetic one. What
+gets *recorded* is unaffected either way: the structure of every reply is decided by tested code
+and only the wording comes from a catalogue, so a translation can change how something reads but
+cannot make the assistant claim something that did not happen.
+
+Adding a language means adding one entry to `src/lib/i18n/messages.ts` and, optionally, a
+vocabulary in `src/lib/providers/extraction/keywords.ts`. A test asserts that every language
+defines every string English does, with the same placeholders.
+
+## Saying where you are
+
+A request with no location cannot be acted on, so the location question cannot be skipped — and
+there are four ways to answer it:
+
+* say or type the place in your own words;
+* **use my current location**, with the device's own stated accuracy drawn as a circle;
+* tap the map to place a pin;
+* choose a known shelter or hub from the list.
+
+Nothing here turns typed words into coordinates. A vague landmark that matches two known places
+becomes a question, not a guess. Exact points are stored for coordinators; the public map shows a
+point coarsened to roughly a kilometre.
 
 ## Dependency advisories
 

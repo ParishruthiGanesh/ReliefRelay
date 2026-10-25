@@ -213,7 +213,7 @@ describe('sensitive information stays where it belongs', () => {
     });
     db.prepare(
       `UPDATE requests SET contact_method = 'phone', contact_value = ?, original_text = ?,
-              transcript_text = ?, resolved_lat = 0.0281234, resolved_lng = -30.0319876
+              transcript_text = ?, resolved_lat = 41.9901234, resolved_lng = -91.6749876
         WHERE id = ?`,
     ).run(SECRET_PHONE, SECRET_TEXT, SECRET_TEXT, created.requestId);
     return { db, created };
@@ -225,8 +225,8 @@ describe('sensitive information stays where it belongs', () => {
 
     expect(serialized).not.toContain(SECRET_PHONE);
     expect(serialized).not.toContain(SECRET_TEXT);
-    expect(serialized).not.toContain('0.0281234');
-    expect(serialized).not.toContain('-30.0319876');
+    expect(serialized).not.toContain('41.9901234');
+    expect(serialized).not.toContain('-91.6749876');
     // Nor the group size or any quantity for an individual household.
     expect(serialized).not.toMatch(/"groupSize"/);
     expect(serialized).not.toMatch(/"quantity"/);
@@ -236,9 +236,9 @@ describe('sensitive information stays where it belongs', () => {
     const { db, created } = requestWithSensitiveData();
     const row = getRequestById(db, created.requestId)!;
     // The exact point was stored, and a separate coarse point is what is published.
-    expect(row.resolved_lat).toBe(0.0281234);
-    expect(row.public_lat).toBe(0.03);
-    expect(row.public_lng).toBe(-30.03);
+    expect(row.resolved_lat).toBe(41.9901234);
+    expect(row.public_lat).toBe(41.99);
+    expect(row.public_lng).toBe(-91.67);
   });
 
   it('shows sensitive fields to a coordinator, because that is who needs them', () => {
@@ -247,7 +247,7 @@ describe('sensitive information stays where it belongs', () => {
     const view = coordinatorRequestView(db, row, listAdvisories(db));
     expect(view.contactValue).toBe(SECRET_PHONE);
     expect(view.originalText).toBe(SECRET_TEXT);
-    expect(view.lat).toBe(0.0281234);
+    expect(view.lat).toBe(41.9901234);
   });
 
   it('shows the requester their own request without coordinator-only notes', () => {
@@ -281,8 +281,8 @@ describe('sensitive information stays where it belongs', () => {
       'Mrs Fictional',
       'Riverbend',
       'Riverside',
-      '0.0281234',
-      '-30.0319876',
+      '41.9901234',
+      '-91.6749876',
       'req_abc123',
       'cmt_def456',
     ]) {

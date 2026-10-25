@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import './globals.css';
 import { ConnectivityBar } from '@/components/ConnectivityBar';
+import { HeaderAccount } from '@/components/HeaderAccount';
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
 
 export const metadata: Metadata = {
@@ -43,9 +44,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </span>
               </span>
             </Link>
-            <nav aria-label="Main" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {/*
+              "Ask for help" leads, on every page, as a button rather than a
+              link. Without it the navigation offered only "Offer help" and
+              "Team sign in", so away from the home page the site read as
+              something for responders and staff — and the person it exists
+              for had no way in.
+            */}
+            <nav aria-label="Main" className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <Link
+                className="inline-flex min-h-[40px] items-center rounded-xl bg-teal-600 px-4 font-semibold
+                           text-white transition-colors hover:bg-teal-700"
+                href="/ask"
+              >
+                Ask for help
+              </Link>
               <Link className="hover:underline" href="/find">
-                Shelters &amp; supplies
+                Find shelter &amp; supplies
               </Link>
               <Link className="hover:underline" href="/advisories">
                 Flood advisories
@@ -56,9 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link className="hover:underline" href="/about">
                 What is real here
               </Link>
-              <Link className="font-semibold text-teal-700 hover:underline" href="/login">
-                Team sign in
-              </Link>
+              <HeaderAccount />
             </nav>
           </div>
         </header>

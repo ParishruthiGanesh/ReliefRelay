@@ -59,6 +59,17 @@ export async function POST(request: Request) {
           confirmed: true,
         };
       }
+    } else if (input.lat !== undefined && input.lng !== undefined) {
+      // A point the person placed on the map or took from their own device.
+      // That is a confirmation by someone who is there, which is the only kind
+      // this app treats as confirmed.
+      resolved = {
+        facilityId: null,
+        lat: input.lat,
+        lng: input.lng,
+        label: input.locationText,
+        confirmed: true,
+      };
     } else {
       const match = matchLocation(db, input.locationText);
       if (match.resolved) {

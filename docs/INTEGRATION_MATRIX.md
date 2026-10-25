@@ -37,14 +37,30 @@ reference version, with the configuration needed for each row.
 
 ## Language coverage
 
-Reported per language at `/about`, split three ways so nothing is over-claimed.
+Three separate questions, never inferred from one another.
 
-| Language | Interface + extraction | Speech recognition | Spoken replies |
-| --- | --- | --- | --- |
-| English | **Written and tested** | Whisper or Deepgram when configured | OpenAI TTS, or the browser's voice |
-| Hindi | Wired; patterns not tuned | Whisper (documented); Deepgram nova-2 (documented) | OpenAI TTS, or the browser's voice |
-| Tamil | **Not written** — listed to show extensibility | Whisper only | OpenAI TTS, or the browser's voice |
-| Telugu | **Not written** — listed to show extensibility | Whisper only | OpenAI TTS, or the browser's voice |
+| Language | Replies (catalogue) | Understood by the built-in extractor | Speech recognition | Spoken replies |
+| --- | --- | --- | --- | --- |
+| English | **Reviewed** | Yes | Whisper, Deepgram | OpenAI TTS or the browser |
+| Hindi | Written, **awaiting native review** | Yes | Whisper, Deepgram | OpenAI TTS or the browser |
+| Spanish | Written, **awaiting native review** | Yes | Whisper, Deepgram | OpenAI TTS or the browser |
+| Tamil | Written, **awaiting native review** | Yes | Whisper only | OpenAI TTS or the browser |
+| Telugu | Written, **awaiting native review** | Yes | Whisper only | OpenAI TTS or the browser |
+| Any other | Falls back to English | Only with `ANTHROPIC_API_KEY` | Provider-dependent | Browser |
 
-The app never advertises a language as voice-ready unless the *configured* provider documents it.
-Selecting Deepgram, for example, marks Tamil and Telugu as unsupported with the reason stated.
+* **Replies** means a message catalogue exists, so the assistant words its questions, read-back
+  and confirmation in that language. `reviewed` records whether a native speaker has checked the
+  wording; only English has. The interface says so at the point of use, not only here.
+* **Understood** means the deterministic extractor has a vocabulary for it — keyword matching for
+  resources, quantities and group size. It is not comprehension, and the note in the interface
+  says that. Claude reads any language when configured.
+* **Speech recognition** is whatever the configured provider documents, and nothing is advertised
+  for a provider that is not configured.
+
+The assistant switches language by itself when the script is decisive, so a person who never
+touches the menu is still answered in the language they used. A Latin-script switch needs two
+independent signals, so answering a question with an English place name does not switch anyone.
+
+A language with no catalogue falls back to English replies even when Claude understands the
+request, because showing someone wording nobody has checked is worse than answering in a language
+they can at least identify as not theirs.

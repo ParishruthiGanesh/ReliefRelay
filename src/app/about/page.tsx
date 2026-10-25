@@ -1,7 +1,7 @@
 import { chainStatus } from '@/lib/providers/chain';
 import { envFeedStatus } from '@/lib/providers/envfeed';
 import { extractionProviderStatus } from '@/lib/providers/extraction';
-import { languageSupport } from '@/lib/providers/languages';
+import { languageSupport, unlistedLanguagePolicy } from '@/lib/providers/languages';
 import { sttStatus } from '@/lib/providers/stt';
 import { ttsStatus } from '@/lib/providers/tts';
 import { Badge, Card, SectionHeading } from '@/components/ui';
@@ -21,6 +21,7 @@ export default async function AboutPage() {
   const feed = envFeedStatus();
   const chain = await chainStatus();
   const languages = languageSupport();
+  const unlisted = unlistedLanguagePolicy();
 
   const rows: Array<{
     capability: string;
@@ -109,7 +110,7 @@ export default async function AboutPage() {
       </Card>
 
       <Card>
-        <SectionHeading description="Listed with what has actually been verified, not with what the architecture could support.">
+        <SectionHeading description="Three separate questions, reported separately: can the assistant word a reply in this language, can it understand one, and does the speech provider cover it?">
           Languages
         </SectionHeading>
         <ul className="space-y-3">
@@ -117,8 +118,17 @@ export default async function AboutPage() {
             <li className="border-b border-sand-200 pb-3 last:border-b-0" key={language.code}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-ink-900">{language.label}</span>
-                <Badge tone={language.uiReady ? 'good' : 'neutral'}>
-                  {language.uiReady ? 'Extraction written' : 'Extraction not written yet'}
+                <Badge tone={language.repliesReviewed ? 'good' : 'warn'}>
+                  {language.repliesReviewed
+                    ? 'Replies reviewed'
+                    : 'Replies written, awaiting native review'}
+                </Badge>
+                <Badge tone={language.understandsReady ? 'good' : 'neutral'}>
+                  {language.understandsVia === 'rules'
+                    ? 'Understood by the built-in extractor'
+                    : language.understandsVia === 'model'
+                      ? 'Understood by Claude'
+                      : 'Not understood without an AI key'}
                 </Badge>
                 <Badge tone={language.sttReady ? 'good' : 'neutral'}>
                   {language.sttReady ? 'Speech recognition configured' : 'No speech recognition'}
@@ -131,6 +141,9 @@ export default async function AboutPage() {
             </li>
           ))}
         </ul>
+        <p className="mt-4 rounded-xl bg-sand-100 p-3 text-sm text-ink-700">
+          <strong>Any other language:</strong> {unlisted.note}
+        </p>
       </Card>
 
       <Card>

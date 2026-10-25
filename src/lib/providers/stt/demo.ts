@@ -52,6 +52,13 @@ export const DEMO_SCRIPT: Record<LanguageCode, DemoLine[]> = {
   ],
   ta: [],
   te: [],
+  es: [
+    {
+      step: 1,
+      text: 'Estamos en la escuela cerca del puente viejo. Aquí hay veinticinco personas. Necesitamos comida y agua potable.',
+      hint: 'The same opening report in Spanish, to show the reply language following the speaker.',
+    },
+  ],
 };
 
 export function demoScript(language: LanguageCode): DemoLine[] {
