@@ -15,6 +15,7 @@ import { recordFacilityUpdate, getFacility } from '@/lib/domain/facilities';
 import { metricsSnapshot } from '@/lib/domain/metrics';
 import { suggestMatches, situationSummary } from '@/lib/domain/matching';
 import { createOffer, acceptOffer, listOffers } from '@/lib/domain/inventory';
+import { createTestDb } from '@/lib/db';
 import { clearAll, seed } from '@/lib/db/seed';
 import { freshDb, itemIdFor, lotQty, makeRequest } from './helpers';
 
@@ -500,3 +501,33 @@ describe('resetting the demonstration data', () => {
     expect(lotQty(db, 'lot_aid_meals')).toEqual({ total: 260, committed: 0, available: 260 });
   });
 });
+
+describe('first boot on an empty database', () => {
+  it('seeds itself, so a fresh deployment is usable without a shell', () => {
+    const db = createTestDb();
+    expect((db.prepare('SELECT COUNT(*) AS n FROM districts').get() as { n: number }).n).toBe(0);
+
+    seedIfEmptyForTest(db);
+
+    expect((db.prepare('SELECT COUNT(*) AS n FROM facilities').get() as { n: number }).n).toBe(5);
+    expect((db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n).toBe(8);
+  });
+
+  it('never overwrites a database that already holds activity', () => {
+    const db = freshDb();
+    const { requestId } = makeRequest(db, { items: [{ categoryId: 'meal_packs', quantity: 10 }] });
+
+    // A second boot must leave the existing request alone.
+    seedIfEmptyForTest(db);
+
+    expect(getRequestById(db, requestId)).toBeDefined();
+    expect((db.prepare('SELECT COUNT(*) AS n FROM requests').get() as { n: number }).n).toBe(1);
+  });
+});
+
+/** Mirrors the boot-time guard in src/lib/db/index.ts. */
+function seedIfEmptyForTest(db: ReturnType<typeof createTestDb>): void {
+  const existing = db.prepare('SELECT COUNT(*) AS n FROM districts').get() as { n: number };
+  if (existing.n > 0) return;
+  seed(db);
+}
