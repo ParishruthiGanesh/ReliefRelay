@@ -218,6 +218,7 @@ If the chain is off, point at **Pending**:
 | Dashboard looks cluttered from a previous run | `npm run db:reset` and start again. |
 | Chain unreachable | Leave it. Attestations show *Pending*, which demonstrates the resilience claim. |
 | Map tiles slow | Press **Hide the map**. Every map has a full list alternative. |
+| "Why is the map just blue?" | The fictional district sits in open ocean on purpose, so it can never be mistaken for a real place. The markers and advisory circles are real; there is simply no land to draw. Say it in one sentence and move on. |
 
 ## Lines worth not cutting
 

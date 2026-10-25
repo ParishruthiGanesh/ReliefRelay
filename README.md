@@ -11,6 +11,11 @@ back, and submitting only after the person confirms.
 > responders on anyone's behalf. Every district, facility, organisation, person and advisory in it
 > is fictional.
 
+The fictional Riverbend District sits at coordinates in open ocean, chosen so it can never be
+mistaken for a real place. Map tiles there show only water — the markers, shelter positions and
+advisory areas are all real and correctly placed relative to each other, there is simply no land
+beneath them.
+
 ---
 
 ## Run it
