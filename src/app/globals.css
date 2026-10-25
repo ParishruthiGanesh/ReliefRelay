@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * ReliefRelay visual language.
+ * Warm off-white surfaces, deep teal for action, restrained orange for
+ * attention only. High contrast, large touch targets, minimal motion.
+ */
+
+:root {
+  color-scheme: light;
+  --surface: #fbf8f3;
+  --surface-raised: #ffffff;
+  --border: #e9e0d2;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: #1f1d19;
+    font-size: 17px;
+    line-height: 1.55;
+  }
+
+  /* Visible focus everywhere, never removed. */
+  :focus-visible {
+    outline: 3px solid #0f6b66;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  h1, h2, h3 {
+    letter-spacing: -0.01em;
+    font-weight: 650;
+  }
+}
+
+@layer components {
+  .rr-card {
+    @apply rounded-2xl border border-sand-200 bg-white shadow-card;
+  }
+
+  .rr-label {
+    @apply block text-sm font-semibold text-ink-700;
+  }
+
+  .rr-input {
+    @apply w-full rounded-xl border border-sand-300 bg-white px-4 py-3 text-ink-900
+           placeholder:text-ink-500/70 focus:border-teal-600 focus:outline-none
+           focus:ring-2 focus:ring-teal-600/30;
+    min-height: 48px;
+  }
+
+  .rr-hint {
+    @apply mt-1 text-sm text-ink-500;
+  }
+}
+
+@layer utilities {
+  /* Honour the reader's motion preference; animation here is decorative only. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  .rr-pulse-record {
+    animation: rr-record 1.6s ease-in-out infinite;
+  }
+
+  @keyframes rr-record {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194, 86, 15, 0.45); }
+    50% { box-shadow: 0 0 0 14px rgba(194, 86, 15, 0); }
+  }
+
+  .rr-skip-link {
+    @apply absolute left-4 z-50 -translate-y-20 rounded-lg bg-teal-700 px-4 py-2
+           text-white focus:translate-y-4;
+  }
+}
+
+/* Leaflet needs explicit sizing and a readable attribution. */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 0.875rem;
+  font-family: inherit;
+  background: #e9e0d2;
+}
+
+.leaflet-control-attribution {
+  font-size: 11px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+}

@@ -1,0 +1,15 @@
+{
+  "name": "ReliefRelay — flood relief coordination",
+  "short_name": "ReliefRelay",
+  "description": "Tell us what you need. Help teams coordinate the response.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbf8f3",
+  "theme_color": "#0f6b66",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

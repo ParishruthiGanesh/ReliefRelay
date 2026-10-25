@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# local data + secrets
+.env
+.env.local
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/recordings/
+
+# hardhat
+artifacts/
+cache/
+chain/deployment.local.json
+
+.DS_Store
+npm-debug.log*
