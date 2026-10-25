@@ -35,32 +35,49 @@ is open.
 
 ## Route B — a durable deployment (do this after you have submitted)
 
-The app stores data in SQLite, so it needs a host with a **persistent disk**. Vercel will not work
-without migrating to Postgres first — its filesystem is ephemeral, and every request would vanish
-on redeploy.
-
-**Render** is the shortest path:
+**Render** is the shortest path, and the **Free** instance type is enough. Free instances have no
+persistent disk, which sounds fatal for a SQLite app — it is not, because the app seeds itself. Every
+cold start comes up as a clean, fully populated district. For a fictional demonstration dataset that
+is the correct behaviour, not a compromise.
 
 1. render.com → New → Web Service → connect this GitHub repo, branch `claude/happy-knuth-hg1or1`.
-2. Build command: `npm install && npm run build`
-3. Start command: `npm start`
-4. Add a **Disk**: mount path `/data`, size 1 GB.
-5. Environment variables:
+2. Instance type: **Free**.
+3. Build command: `npm install; npm run build`
+4. Start command: `npm run start`
+5. **Do not add a Disk.** Free instances do not support one, and the app does not need one.
+6. Environment variables:
 
    ```
-   RELIEFRELAY_DB_PATH=/data/reliefrelay.db
+   NODE_VERSION=22
    NODE_ENV=production
+   RELIEFRELAY_DB_PATH=/tmp/reliefrelay.db
    EMERGENCY_NUMBER=112
    EMERGENCY_LABEL=Local emergency services (fictional demonstration)
    ```
 
-6. Deploy.
+   `NODE_VERSION=22` matters: `better-sqlite3` ships prebuilt binaries for it, so the build does not
+   fall back to compiling from source inside a 512 MB container.
 
-**You do not need to run a seed step.** The app detects an empty database on first boot and seeds
-the fictional dataset itself, logging `empty database detected — seeded the fictional
-demonstration data`. Set `RELIEFRELAY_NO_AUTOSEED=true` to turn that off.
+7. Deploy.
 
-Railway and Fly.io work the same way; the only thing that matters is a mounted volume and
+**You do not need to run a seed step.** The app detects an empty database on first boot and seeds the
+fictional dataset itself, logging `empty database detected — seeded the fictional demonstration data`.
+Set `RELIEFRELAY_NO_AUTOSEED=true` to turn that off.
+
+### What the free tier costs you, stated plainly
+
+- **Cold starts take roughly 50 seconds.** Free instances spin down after about 15 minutes idle. Open
+  the link yourself a minute before anyone judges it, and leave a tab open so it stays warm.
+- **Data resets when it spins down.** Requests submitted by a judge will not be there an hour later.
+  The seeded district always will be. Say so on the Devpost page rather than letting someone discover
+  it: *"hosted on a free instance; the demonstration dataset reseeds on each cold start."*
+- **Build memory is tight** (512 MB). If the build is killed by the OOM killer, add
+  `NODE_OPTIONS=--max-old-space-size=460` and redeploy.
+- No SSH, no scaling, no one-off jobs. None of these are needed — the seed runs in-process.
+
+If you want data to survive, that is the one thing worth paying for: a Starter instance plus a 1 GB
+disk at mount path `/data`, with `RELIEFRELAY_DB_PATH=/data/reliefrelay.db` instead of the `/tmp`
+path above. Railway and Fly.io work the same way; the only thing that matters is a mounted volume and
 `RELIEFRELAY_DB_PATH` pointing into it.
 
 ### What will *not* be live on a deployment

@@ -332,9 +332,14 @@ to quiet a number.
 
 ## Deployment notes
 
-The app needs a **writable, persistent filesystem** for the SQLite database at
-`RELIEFRELAY_DB_PATH`. Ephemeral container filesystems lose every request on redeploy. On a
-platform without persistent disk, point `RELIEFRELAY_DB_PATH` at a mounted volume, or port the
+The app needs a **writable filesystem** for the SQLite database at `RELIEFRELAY_DB_PATH`. It does
+not need a *persistent* one to be demonstrable: on boot, an empty database is detected and seeded
+with the fictional dataset, logging `empty database detected — seeded the fictional demonstration
+data`. So on an ephemeral host (a Render free instance, for example) point `RELIEFRELAY_DB_PATH` at
+`/tmp/reliefrelay.db` and every cold start comes up as a clean, fully populated district; requests
+submitted between restarts are lost. Set `RELIEFRELAY_NO_AUTOSEED=true` to disable the behaviour.
+
+For data that survives a restart, point `RELIEFRELAY_DB_PATH` at a mounted volume, or port the
 repository layer in `src/lib/domain/` to a hosted Postgres — the allocation logic depends on
 `BEGIN IMMEDIATE` plus a conditional `UPDATE`, which maps to `SELECT ... FOR UPDATE` or the same
 conditional-update pattern.

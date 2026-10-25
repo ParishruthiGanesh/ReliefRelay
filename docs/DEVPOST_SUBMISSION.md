@@ -245,6 +245,12 @@ https://github.com/ParishruthiGanesh/ReliefRelay/tree/claude/happy-knuth-hg1or1
 
 Add your public app URL as a second link once the tunnel or deploy is up.
 
+If you host on a Render free instance, add one honest line beside the link — judges respect it far
+more than discovering it themselves:
+
+> Hosted on a free instance: the first load after a quiet period takes about 50 seconds to wake, and
+> the demonstration dataset reseeds on each cold start.
+
 ## 6. Video demo link
 
 Upload `ReliefRelay-demo.mp4` to YouTube as **Unlisted**, then paste the watch URL. Devpost needs
