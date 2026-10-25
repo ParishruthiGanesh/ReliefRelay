@@ -37,13 +37,51 @@ export function fail(
   });
 }
 
+/**
+ * Largest body any endpoint accepts.
+ *
+ * The audio upload is the only genuinely large one: `sttRequestSchema` caps
+ * base64 audio at 20 MB, and base64 costs about a third on top. Everything
+ * else is small JSON.
+ */
+const MAX_BODY_BYTES = 28 * 1024 * 1024;
+/** Everything except the audio endpoint is small; hold those to a tight cap. */
+const MAX_JSON_BODY_BYTES = 256 * 1024;
+
 export async function readBody<T extends z.ZodTypeAny>(
   request: Request,
   schema: T,
+  options: { maxBytes?: number } = {},
 ): Promise<{ ok: true; data: z.infer<T> } | { ok: false; response: NextResponse }> {
+  const limit = options.maxBytes ?? MAX_JSON_BODY_BYTES;
+
+  // Read and measure the body before parsing it.
+  //
+  // Schema limits like `.max(8)` on an array are checked *after* the whole
+  // payload has been parsed into memory, so they do not protect against
+  // someone posting a hundred-megabyte array at a public endpoint. Validators
+  // have had memory-exhaustion advisories for exactly this shape of input
+  // (zod GHSA, Nov 2025), and the durable fix is to refuse the body before any
+  // parser sees it rather than to rely on the validator being careful.
+  const declared = Number(request.headers.get('content-length') ?? '');
+  if (Number.isFinite(declared) && declared > limit) {
+    return { ok: false, response: tooLarge(limit) };
+  }
+
+  let text: string;
+  try {
+    text = await request.text();
+  } catch {
+    return { ok: false, response: fail('invalid_json', 'The request body could not be read.') };
+  }
+  // A missing or dishonest content-length is why this is measured again.
+  if (Buffer.byteLength(text, 'utf8') > limit) {
+    return { ok: false, response: tooLarge(limit) };
+  }
+
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = JSON.parse(text);
   } catch {
     return { ok: false, response: fail('invalid_json', 'The request body was not valid JSON.') };
   }
@@ -58,6 +96,17 @@ export async function readBody<T extends z.ZodTypeAny>(
   }
   return { ok: true, data: parsed.data };
 }
+
+function tooLarge(limit: number): NextResponse {
+  return fail(
+    'body_too_large',
+    `That request was too large. The limit is ${Math.round(limit / 1024)} KB.`,
+    413,
+  );
+}
+
+/** The audio endpoint, and only that one, may send a large body. */
+export const AUDIO_BODY_LIMIT = MAX_BODY_BYTES;
 
 export async function currentUser(db: DB = getDb()): Promise<SessionUser | null> {
   const store = await cookies();

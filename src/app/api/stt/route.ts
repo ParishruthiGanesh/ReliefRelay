@@ -1,4 +1,4 @@
-import { handleError, json, readBody } from '@/lib/api/http';
+import { AUDIO_BODY_LIMIT, handleError, json, readBody } from '@/lib/api/http';
 import { getSttProvider, sttUnavailable } from '@/lib/providers/stt';
 import { sttRequestSchema } from '@/lib/validation/schemas';
 
@@ -15,7 +15,8 @@ export const dynamic = 'force-dynamic';
  *     unless RETAIN_SERVER_AUDIO=true, and is never logged.
  */
 export async function POST(request: Request) {
-  const body = await readBody(request, sttRequestSchema);
+  // Audio is the one endpoint that legitimately sends megabytes.
+  const body = await readBody(request, sttRequestSchema, { maxBytes: AUDIO_BODY_LIMIT });
   if (!body.ok) return body.response;
 
   const provider = getSttProvider();

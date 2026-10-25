@@ -4,7 +4,7 @@
 npm run verify     # typecheck + 92 tests + 7 contract tests + production build
 ```
 
-Last full run: **92 passing** (Vitest, 9 files) · **7 passing** (Hardhat) · typecheck clean ·
+Last full run: **105 passing** (Vitest, 11 files) · **7 passing** (Hardhat) · typecheck clean ·
 production build clean · browser walkthrough clean.
 
 ---
@@ -39,6 +39,8 @@ production build clean · browser walkthrough clean.
 | `concurrency.test.ts` | 4 | Two-process race; stale-read refusal; burst of reservations; the database-level CHECK constraint |
 | `chain.test.ts` | 5 | Chain disabled; chain unreachable; appended corrections for shortfall and cancellation; hash explanation |
 | `chain-live.test.ts` | 1 | A real Hardhat node, real deployment, real transactions: 4 acknowledgements confirmed with tx hashes and block numbers |
+| `body-limit.test.ts` | 5 | Oversized bodies refused with 413 before parsing; a dishonest `content-length` does not get a large body through; the audio endpoint keeps its own higher limit |
+| `validation-guarantees.test.ts` | 8 | The properties the security model depends on, re-verified across the zod 3 → 4 major upgrade: `.strict()` still rejects keys a model may not propose, defaults still apply, constraints and enums still bite |
 | `providers.test.ts` | 13 | Every fallback path, language-claim honesty, out-of-schema model replies, spoken-number handling |
 | `chain/test/supplyAttestations.test.cjs` | 7 | Access control, org-mismatch refusal, append-only correction, per-subject and per-org trails |
 
@@ -84,6 +86,13 @@ These are worth listing because none of them were caught by reasoning about the 
    raw detail. Replaced with an allow-list of event kinds and fields.
 6. **Attestation transactions collided on nonce assignment** when flushed in sequence — found only
    by standing up a real local node. The adapter now tracks the nonce and resyncs after a failure.
+7. **A stale commit quantity persisted after a short delivery reopened a need.** The typed amount
+   is keyed by request item plus inventory lot, and that pair is suggested again — so a 60 typed
+   against a 100-pack shortfall was still in the box when the suggestion came back asking for 10.
+   Found by driving the demonstration through the browser, not by reading the code.
+8. **Request bodies were parsed before being measured.** Schema limits are checked after the whole
+   payload is in memory, so a public endpoint had no defence against a very large array. Now
+   capped before any parser sees it.
 
 ---
 

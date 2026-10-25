@@ -234,6 +234,46 @@ that goods changed hands, and it does not prevent anyone acknowledging something
 
 ---
 
+## Dependency advisories
+
+`npm install` reports advisories. Here is the honest state of them, because the
+headline count is misleading:
+
+```bash
+npm audit --omit=dev     # what actually ships: 1 underlying issue
+npm audit                # everything, including the test and chain toolchains
+```
+
+**Runtime tree (what ships): one underlying issue, not reachable here.** Both entries
+(`next` and `postcss`) trace to the same thing — `next` has no advisory of its own, it is
+flagged `via: ["postcss"]`. The PostCSS advisories concern CSS source-map handling and
+`</style>` escaping, and they require *attacker-controlled CSS*. PostCSS runs here at build
+time over this repository's own stylesheet and Tailwind's output; no user input ever reaches
+it. Clearing the flag requires Next 16, a framework major version, which would close no
+actual exposure in this application. Worth doing deliberately, not in a rush before a demo.
+
+**Everything else is dev-only** and never ships: `hardhat` and its tree (`undici`,
+`adm-zip`, `serialize-javascript`, `tmp`, `@fastify/busboy`), `vitest` and `tinypool`.
+They run on a developer's machine against this repository's own code.
+
+**What was actually acted on:**
+
+* **`zod` upgraded to 4.6.7.** This one mattered — it is a runtime dependency that validates
+  every untrusted API body, and the advisory is memory exhaustion while validating oversized
+  constrained collections, which is exactly what a public endpoint receives. There is no fix
+  on the 3.x line. `tests/validation-guarantees.test.ts` re-verifies the properties the
+  security model depends on across the major version, above all that `.strict()` still
+  rejects the keys a language model is not allowed to propose.
+* **Request bodies are capped before parsing** (`src/lib/api/http.ts`). A schema limit such
+  as `.max(8)` on an array is checked *after* the payload has been parsed into memory, so it
+  cannot defend an endpoint against a hundred-megabyte array. The cap is 256 KB for JSON and
+  28 MB for the audio endpoint, enforced on the measured body rather than a claimed
+  `content-length`. This holds regardless of which validator is in use, which is the point.
+
+`npm audit fix --force` would install Hardhat 3 and Next 16. Both are breaking, and neither
+closes a path that is reachable in this application. Run them when you intend to migrate, not
+to quiet a number.
+
 ## Deployment notes
 
 The app needs a **writable, persistent filesystem** for the SQLite database at
