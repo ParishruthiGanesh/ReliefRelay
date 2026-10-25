@@ -42,21 +42,30 @@ is the correct behaviour, not a compromise.
 
 1. render.com → New → Web Service → connect this GitHub repo, branch `claude/happy-knuth-hg1or1`.
 2. Instance type: **Free**.
-3. Build command: `npm install; npm run build`
+3. Build command: `npm ci --include=dev && npm run build`
 4. Start command: `npm run start`
 5. **Do not add a Disk.** Free instances do not support one, and the app does not need one.
 6. Environment variables:
 
    ```
    NODE_VERSION=22
-   NODE_ENV=production
    RELIEFRELAY_DB_PATH=/tmp/reliefrelay.db
    EMERGENCY_NUMBER=112
    EMERGENCY_LABEL=Local emergency services (fictional demonstration)
    ```
 
-   `NODE_VERSION=22` matters: `better-sqlite3` ships prebuilt binaries for it, so the build does not
-   fall back to compiling from source inside a 512 MB container.
+   Two of these settings are not cosmetic:
+
+   - **`--include=dev` in the build command.** `typescript`, `tailwindcss` and `postcss` are
+     devDependencies, and `next build` needs all three. Any host that installs with
+     `NODE_ENV=production` set will skip them and the build dies with
+     `Cannot find module 'typescript'`.
+   - **Do not set `NODE_ENV` yourself.** Render already sets it to `production` for the running
+     service. Setting it as a build-time variable is what makes `npm install` drop the
+     devDependencies in the first place.
+
+   `NODE_VERSION=22` matters for a different reason: `better-sqlite3` ships prebuilt binaries for
+   it, so the build does not fall back to compiling from source inside a 512 MB container.
 
 7. Deploy.
 

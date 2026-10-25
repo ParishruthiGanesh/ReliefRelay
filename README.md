@@ -344,5 +344,12 @@ repository layer in `src/lib/domain/` to a hosted Postgres — the allocation lo
 `BEGIN IMMEDIATE` plus a conditional `UPDATE`, which maps to `SELECT ... FOR UPDATE` or the same
 conditional-update pattern.
 
+The build needs devDependencies — `typescript`, `tailwindcss` and `postcss` among them. If your
+host sets `NODE_ENV=production` before the install step, `npm install` silently skips them and
+`next build` fails with `Cannot find module 'typescript'`. Install with `npm ci --include=dev`, and
+leave `NODE_ENV` to the platform rather than setting it as a build variable. `next.config.mjs` is
+plain JavaScript for the same family of reasons: Next loads the config at `next start` as well as at
+build time, and a `.ts` config would make `typescript` a runtime dependency.
+
 The local chain is **local only**. There is no configuration in this repository that deploys to a
 public network, and the development keys hold no value.
