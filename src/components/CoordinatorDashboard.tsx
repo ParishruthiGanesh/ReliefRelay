@@ -559,6 +559,19 @@ function RequestAllocationPanel({
   const [receiptQty, setReceiptQty] = useState<Record<string, string>>({});
   const [cancelReason, setCancelReason] = useState<Record<string, string>>({});
 
+  // Typed commit quantities are keyed by item + lot, and the same pair can be
+  // suggested again after a short delivery reopens the need. Without this, a
+  // 60 typed against a 100-pack shortfall would still be sitting in the box
+  // when the suggestion came back asking for 10 — a number the server would
+  // refuse. Clearing on a genuine change of the suggestion set puts the fresh
+  // suggested amount back in each box.
+  const suggestionSignature = suggestions
+    .map((s) => `${s.requestItemId}:${s.lotId}:${s.outstandingQty}:${s.suggestedQty}`)
+    .join('|');
+  useEffect(() => {
+    setQuantities({});
+  }, [suggestionSignature]);
+
   return (
     <div className="mt-4 space-y-4 rounded-xl bg-sand-50 p-4">
       <div>
